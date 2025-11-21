@@ -1,0 +1,28 @@
+data/*
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+
+# Virtual env
+.venv/
+venv/
+
+# OS
+.DS_Store
+
+# Cache
+logs/
+
+# Environment
+.env
+
+# Byte-compiled
+*.swp
+
+anaira/
+anaira312
