@@ -173,7 +173,7 @@ def main():
     from pathlib import Path
     import json
 
-    input_dir = Path("../../data/raw_downloaded_pdfs")
+    input_dir = Path("../../data/raw_pdfs")
     output_dir = Path("../../data/processed_text")
     output_dir.mkdir(parents=True, exist_ok=True)
 

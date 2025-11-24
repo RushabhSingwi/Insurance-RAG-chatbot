@@ -13,8 +13,7 @@ Quick guide to setting up and running the IRDAI Insurance Circulars RAG system.
 ### 1. Clone Repository
 
 ```bash
-git clone <repository-url>
-cd rag-irdai-chatbot
+git clone https://github.com/RushabhSingwi/Insurance-RAG-chatbot.git
 ```
 
 ### 2. Create Virtual Environment
@@ -72,8 +71,6 @@ OPENAI_API_KEY=your_openai_key_here
 # EMBEDDING_PROVIDER=sentence-transformers
 # EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
 
-# Vector Store Location
-VECTOR_STORE_DIR=data/vector_store
 ```
 
 **Get API Keys:**
@@ -102,7 +99,7 @@ If starting from scratch:
 python src/downloader/fetch_pdfs.py
 ```
 
-Downloads ~93 IRDAI circulars to `data/raw_downloaded_pdfs/`
+Downloads ~93 IRDAI circulars to `data/raw_pdfs/`
 
 **Step 2: Preprocess PDFs (~10-15 min)**
 
@@ -156,11 +153,9 @@ Access at: http://localhost:8501
 python src/rag_pipeline/pipeline.py
 ```
 
-This will run example queries and enter interactive mode.
-
 ## Common Issues
 
-### "FAISS index not found"
+### "ChromaDB index not found"
 
 **Solution:**
 ```bash
@@ -200,7 +195,7 @@ Test the installation:
 
 ```bash
 # Test imports
-python -c "import faiss; import openai; print('✅ All packages installed')"
+python -c "import chromadb; import openai; print('✅ All packages installed')"
 
 # Test RAG pipeline
 python src/rag_pipeline/pipeline.py
@@ -208,17 +203,3 @@ python src/rag_pipeline/pipeline.py
 # Test API (if running)
 curl http://localhost:8000/
 ```
-
-## Next Steps
-
-1. **Add Documents**: Place PDFs in `data/raw_downloaded_pdfs/` and reprocess
-2. **Customize Settings**: Edit `.env` for different models or providers
-3. **Deploy**: Set up production server with gunicorn/nginx
-
-## Performance
-
-- **Build Time**: ~12-18 minutes (full pipeline)
-- **Query Time**: ~100-200ms (OpenAI embedding) + <1ms (FAISS) + 1-3s (LLM)
-- **Storage**: ~59MB total (6MB FAISS index for 3072-dim vectors)
-- **Memory**: ~400MB peak (no local model loading with OpenAI API)
-- **Cost**: ~$0.02 one-time (embeddings) + $0/session (Groq LLM)

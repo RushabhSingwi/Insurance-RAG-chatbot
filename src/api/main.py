@@ -21,7 +21,13 @@ from rag_pipeline.pipeline import RAGPipeline
 # Load environment variables from project root
 project_root = Path(__file__).parent.parent.parent
 env_path = project_root / ".env"
-load_dotenv(dotenv_path=env_path)
+
+# CRITICAL FIX: Clear any system-wide environment variables that may be wrong
+# This ensures .env file values take precedence
+if 'OPENAI_API_KEY' in os.environ:
+    del os.environ['OPENAI_API_KEY']
+
+load_dotenv(dotenv_path=env_path, override=True)  # Force override of existing env vars
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -114,13 +120,22 @@ async def health_check():
     """Health check endpoint."""
     try:
         pipeline = get_pipeline()
-        # Get model name from embedder
-        model_name = pipeline.embedder.model_name if pipeline.embedder else "unknown"
+        # Get collection count from ChromaDB
+        index_size = pipeline.vector_store._collection.count()
+
+        # Get embedding dimension based on provider
+        if os.getenv("EMBEDDING_PROVIDER", "huggingface") == "huggingface":
+            embedding_dim = 384  # sentence-transformers/all-MiniLM-L6-v2
+            model_name = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
+        else:
+            embedding_dim = 1536  # OpenAI text-embedding-3-small
+            model_name = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
+
         return HealthResponse(
             status="healthy",
-            index_size=pipeline.index_builder.index.ntotal,
-            embedding_model=f"{pipeline.embedding_provider}:{model_name}",
-            embedding_dimension=pipeline.embedding_dim
+            index_size=index_size,
+            embedding_model=model_name,
+            embedding_dimension=embedding_dim
         )
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Service unavailable: {str(e)}")
@@ -140,36 +155,23 @@ async def query(request: QueryRequest):
     try:
         pipeline = get_pipeline()
 
-        # Convert conversation history to dict format
-        conversation_history = None
-        if request.conversation_history:
-            conversation_history = [
-                {
-                    'question': entry.question,
-                    'answer': entry.answer,
-                    'sources': entry.sources or []
-                }
-                for entry in request.conversation_history
-            ]
-
         # Execute query with optional LLM provider
         result = pipeline.query(
             request.question,
             top_k=request.top_k,
-            conversation_history=conversation_history,
             llm_provider=request.llm_provider
         )
 
         # Format results
         chunk_results = []
-        for r in result['top_k_results']:
+        for r in result['results']:
             # Calculate similarity score from distance
             similarity = 1 / (1 + r['distance'])
 
             chunk_results.append(ChunkResult(
                 chunk=r['chunk'],
                 source_file=r['metadata']['source_file'],
-                chunk_index=r['metadata']['chunk_index'],
+                chunk_index=int(r['metadata']['chunk_index']),
                 distance=r['distance'],
                 similarity=similarity
             ))
@@ -196,16 +198,28 @@ async def get_stats():
     try:
         pipeline = get_pipeline()
 
-        # Get model name from embedder
-        model_name = pipeline.embedder.model_name if pipeline.embedder else "unknown"
+        # Get collection data from ChromaDB
+        total_documents = pipeline.vector_store._collection.count()
+
+        # Get embedding config
+        embedding_provider = os.getenv("EMBEDDING_PROVIDER", "huggingface")
+        embedding_model = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
+        embedding_dim = 384 if embedding_provider == "huggingface" else 1536
+
+        # Get all metadata to calculate unique sources
+        if total_documents > 0:
+            all_data = pipeline.vector_store._collection.get(limit=total_documents)
+            unique_sources = len(set([m['source_file'] for m in all_data['metadatas']])) if all_data['metadatas'] else 0
+        else:
+            unique_sources = 0
 
         return {
-            "total_documents": pipeline.index_builder.index.ntotal,
-            "embedding_dimension": pipeline.embedding_dim,
-            "embedding_provider": pipeline.embedding_provider,
-            "embedding_model": f"{pipeline.embedding_provider}:{model_name}",
-            "total_chunks": len(pipeline.index_builder.chunks),
-            "unique_sources": len(set([m['source_file'] for m in pipeline.index_builder.metadata]))
+            "total_documents": total_documents,
+            "embedding_dimension": embedding_dim,
+            "embedding_provider": embedding_provider,
+            "embedding_model": embedding_model,
+            "total_chunks": total_documents,
+            "unique_sources": unique_sources
         }
 
     except Exception as e:

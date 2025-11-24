@@ -56,38 +56,45 @@ def benchmark_embeddings():
     return avg_time
 
 
-def benchmark_faiss_search():
-    """Measure FAISS search time."""
-    import faiss
-    import json
+def benchmark_chromadb_search():
+    """Measure ChromaDB search time."""
+    import chromadb
+    import numpy as np
+    from src.embeddings.build_index import ChromaDBIndexBuilder
 
     print("\n" + "="*80)
-    print("BENCHMARK: FAISS Search Time")
+    print("BENCHMARK: ChromaDB Search Time")
     print("="*80)
 
     vector_store_dir = Path(os.getenv("VECTOR_STORE_DIR", "data/vector_store"))
+    persist_dir = vector_store_dir / "chromadb"
 
-    # Load FAISS index
-    index_path = vector_store_dir / "faiss_index.bin"
-    if not index_path.exists():
-        print("❌ FAISS index not found. Run: python src/embeddings/build_index.py")
+    # Check if ChromaDB index exists
+    if not persist_dir.exists():
+        print("❌ ChromaDB index not found. Run: python src/embeddings/build_index.py")
         return None
 
-    index = faiss.read_index(str(index_path))
+    # Load ChromaDB collection
+    from src.embeddings.embedder import EmbeddingGenerator
+    embedder = EmbeddingGenerator()
+    embedding_dim = embedder.get_embedding_dimension()
+    
+    builder = ChromaDBIndexBuilder(embedding_dim=embedding_dim, persist_directory=str(persist_dir))
+    builder.load_index()
+    collection = builder._get_or_create_collection()
 
     print(f"\nIndex Info:")
-    print(f"  Total vectors: {index.ntotal}")
-    print(f"  Dimension: {index.d}")
+    print(f"  Total vectors: {collection.count()}")
+    print(f"  Collection name: {builder.collection_name}")
 
     # Create a random query vector
-    import numpy as np
-    query_vector = np.random.rand(1, index.d).astype('float32')
+    query_vector = np.random.rand(embedding_dim).astype('float32')
 
     # Measure 100 searches
     times = []
     for i in range(100):
         start = time.time()
-        distances, indices = index.search(query_vector, k=10)
+        results = builder.search(query_vector, k=10)
         elapsed = (time.time() - start) * 1000  # Convert to ms
         times.append(elapsed)
 
@@ -173,7 +180,7 @@ def measure_storage():
     data_dir = Path("data")
 
     components = {
-        "Raw PDFs": data_dir / "raw_downloaded_pdfs",
+        "Raw PDFs": data_dir / "raw_pdfs",
         "Processed Text": data_dir / "processed_text",
         "Chunks": data_dir / "chunks",
         "Vector Store": data_dir / "vector_store",
@@ -193,11 +200,11 @@ def measure_storage():
     print(f"  {'─'*20} {'─'*12}")
     print(f"  {'TOTAL':20} {format_size(total_size):>12}")
 
-    # Check FAISS index specifically
-    faiss_index = data_dir / "vector_store" / "faiss_index.bin"
-    if faiss_index.exists():
-        faiss_size = faiss_index.stat().st_size
-        print(f"\n  FAISS Index: {format_size(faiss_size)}")
+    # Check ChromaDB index specifically
+    chromadb_dir = data_dir / "vector_store" / "chromadb"
+    if chromadb_dir.exists():
+        chromadb_size = get_dir_size(chromadb_dir)
+        print(f"\n  ChromaDB Index: {format_size(chromadb_size)}")
 
     return total_size
 
@@ -240,7 +247,7 @@ def estimate_download_time():
     print("="*80)
 
     # Check if PDFs exist
-    pdf_dir = Path("data/raw_downloaded_pdfs")
+    pdf_dir = Path("data/raw_pdfs")
     if pdf_dir.exists():
         pdf_count = len(list(pdf_dir.glob("*.pdf")))
         print(f"\nFound {pdf_count} existing PDFs in {pdf_dir}")
@@ -308,12 +315,12 @@ def generate_report():
         print(f"\n❌ Embedding benchmark failed: {e}")
         report['embedding_time_ms'] = None
 
-    # 4. FAISS search time
+    # 4. ChromaDB search time
     try:
-        report['faiss_time_ms'] = benchmark_faiss_search()
+        report['chromadb_time_ms'] = benchmark_chromadb_search()
     except Exception as e:
-        print(f"\n❌ FAISS benchmark failed: {e}")
-        report['faiss_time_ms'] = None
+        print(f"\n❌ ChromaDB benchmark failed: {e}")
+        report['chromadb_time_ms'] = None
 
     # 5. End-to-end query time
     try:
@@ -335,7 +342,7 @@ def generate_report():
         if report.get('embedding_time_ms'):
             embed_build_time = (501 * report['embedding_time_ms']) / 1000 / 60
             print(f"  Embedding Generation: {embed_build_time:.1f} minutes (501 chunks)")
-        print(f"  Index Building: <1 second")
+        print(f"  Index Building: ~1-2 seconds")
         total_build = report['download_time_s']/60 + 12.5  # 12.5 = average of 10-15
         if report.get('embedding_time_ms'):
             total_build += embed_build_time
@@ -353,23 +360,23 @@ def generate_report():
         print(f"\n⚡ Query Embedding Time:")
         print(f"  Average: {report['embedding_time_ms']:.2f} ms")
 
-    if report.get('faiss_time_ms'):
-        print(f"\n🔍 FAISS Search Time:")
-        print(f"  Average: {report['faiss_time_ms']:.4f} ms")
+    if report.get('chromadb_time_ms'):
+        print(f"\n🔍 ChromaDB Search Time:")
+        print(f"  Average: {report['chromadb_time_ms']:.4f} ms")
 
     if report.get('query_time_s'):
         print(f"\n🎯 End-to-End Query Time:")
         print(f"  Average: {report['query_time_s']:.2f} seconds")
 
         # Break down the query time
-        if report.get('embedding_time_ms') and report.get('faiss_time_ms'):
+        if report.get('embedding_time_ms') and report.get('chromadb_time_ms'):
             embedding_s = report['embedding_time_ms'] / 1000
-            faiss_s = report['faiss_time_ms'] / 1000
-            llm_s = report['query_time_s'] - embedding_s - faiss_s
+            chromadb_s = report['chromadb_time_ms'] / 1000
+            llm_s = report['query_time_s'] - embedding_s - chromadb_s
 
             print(f"\n  Breakdown:")
             print(f"    Embedding: {embedding_s:.3f}s ({embedding_s/report['query_time_s']*100:.1f}%)")
-            print(f"    FAISS:     {faiss_s:.3f}s ({faiss_s/report['query_time_s']*100:.1f}%)")
+            print(f"    ChromaDB:  {chromadb_s:.3f}s ({chromadb_s/report['query_time_s']*100:.1f}%)")
             print(f"    LLM:       {llm_s:.3f}s ({llm_s/report['query_time_s']*100:.1f}%)")
 
     # Cost estimation

@@ -3,6 +3,6 @@ Embeddings module for generating and managing text embeddings.
 """
 
 from .embedder import EmbeddingGenerator
-from .build_index import FAISSIndexBuilder
+from .build_index import ChromaDBIndexBuilder
 
-__all__ = ['EmbeddingGenerator', 'FAISSIndexBuilder']
+__all__ = ['EmbeddingGenerator', 'ChromaDBIndexBuilder']

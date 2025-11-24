@@ -42,7 +42,7 @@ def split_into_chunks(text: str, max_tokens: int = 800, chunk_overlap: int = 200
             chunks.append(text[i:i + chunk_size])
         return chunks
 
-    chunk_size = max_tokens * 4  # 1 token ≈ 4 characters
+    chunk_size = max_tokens * 4
 
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=chunk_size,
@@ -71,8 +71,8 @@ def main():
     from pathlib import Path
     import json
 
-    input_dir = Path("../../data/processed_text")
-    output_dir = Path("../../data/chunks")
+    input_dir = Path("data/processed_text_clean")
+    output_dir = Path("data/chunks")
     output_dir.mkdir(parents=True, exist_ok=True)
 
     txt_files = list(input_dir.glob("*.txt"))

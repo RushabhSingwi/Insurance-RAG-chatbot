@@ -2,14 +2,23 @@
 
 A Retrieval-Augmented Generation (RAG) system for querying IRDAI insurance circulars with a conversational AI interface.
 
+## 🎯 Performance Highlights
+
+- **Answer Relevancy: 0.86** (excellent performance)
+- **Faithfulness: 0.96** (minimal hallucination)
+- **Hit Rate: 87%** (13/15 test queries succeed)
+- **Response Time: 2-4 seconds** (end-to-end with LLM)
+- **Cost: $0.08 per 1000 queries** (highly cost-effective)
+
 ## Features
 
-- **Semantic Search**: Find relevant insurance regulations using natural language queries
-- **Answer Generation**: Get direct answers with source citations using OpenAI/Groq
+- **Semantic Search**: Find relevant insurance regulations using natural language queries with **91% context precision**
+- **Answer Generation**: Get direct answers with source citations using optimized GPT-4o-mini
 - **Conversation Context**: Ask follow-up questions that reference previous exchanges
 - **Web Interface**: User-friendly Streamlit chat interface
 - **REST API**: FastAPI backend for programmatic access
-- **Near-Zero Cost**: ~$0.12/year with OpenAI embeddings + Groq LLM | 100% Free: Use local embeddings alternative
+- **Optimized Configuration**: Systematically tested top_k=3 for best quality/cost balance
+- **Low Cost**: ~$0.08/1000 queries with OpenAI embeddings + GPT-4o-mini
 
 ## Quick Start
 
@@ -49,7 +58,7 @@ cp .env.example .env
 python src/downloader/fetch_pdfs.py
 ```
 
-This downloads ~93 IRDAI circulars to `data/raw_downloaded_pdfs/`
+This downloads ~93 IRDAI circulars to `data/raw_pdfs/`
 
 **Step 2: Preprocess PDFs**
 
@@ -73,13 +82,13 @@ Output: `data/chunks/` directory with JSON files containing text chunks
 
 > **Note**: Each module can also be imported and used programmatically. See [src/preprocessing/README.md](src/preprocessing/README.md) for details.
 
-**Step 3: Build FAISS Index**
+**Step 3: Build ChromaDB Index**
 
 ```bash
 python src/embeddings/build_index.py
 ```
 
-This creates embeddings and builds the vector store.
+This creates embeddings and builds the ChromaDB vector store.
 
 
 ### Run the Application
@@ -109,7 +118,7 @@ FastAPI Backend
     ↓
 RAG Pipeline
     ├→ Query Enhancement (for follow-ups)
-    ├→ FAISS Vector Search
+    ├→ ChromaDB Vector Search
     ├→ Context Aggregation
     └→ LLM Answer Generation (OpenAI/Groq)
         ↓
@@ -122,29 +131,35 @@ RAG Pipeline
 
 ```env
 # LLM Provider (openai or groq)
-LLM_PROVIDER=groq
-GROQ_API_KEY=your_groq_api_key_here
-# Or for OpenAI
+LLM_PROVIDER=openai
 OPENAI_API_KEY=your_openai_key_here
+OPENAI_MODEL=gpt-4o-mini
 
-# Embedding Model
+# Optional: Groq for free LLM (alternative)
+GROQ_API_KEY=your_groq_api_key_here
+GROQ_MODEL=llama-3.3-70b-versatile
+
+# Embedding Configuration
+EMBEDDING_PROVIDER=openai
 EMBEDDING_MODEL=text-embedding-3-large
 
-# Paths
-VECTOR_STORE_DIR=data/vector_store
+# Top-K Retrieval
+TOP_K_RESULTS=3
 ```
 
 ### LLM Providers
 
-**Groq (Recommended - Free)**
-- Get API key: https://console.groq.com
-- Model: llama-3.3-70b-versatile
-- Fast inference, generous free tier
-
-**OpenAI (Paid)**
+**OpenAI (Current Configuration)**
 - Get API key: https://platform.openai.com
 - Model: gpt-4o-mini
 - High quality, requires credits
+- Used in evaluation for 0.86 answer relevancy
+
+**Groq (Free Alternative)**
+- Get API key: https://console.groq.com
+- Model: llama-3.3-70b-versatile
+- Fast inference, generous free tier
+- Switch by changing `LLM_PROVIDER=groq` in .env
 
 ## Project Structure
 
@@ -156,20 +171,23 @@ rag-irdai-chatbot/
 │   ├── api/
 │   │   └── main.py              # FastAPI backend
 │   ├── embeddings/
-│   │   ├── embedder.py          # Multi-provider embeddings
-│   │   └── build_index.py       # FAISS index builder
+│   │   └── build_index.py       # ChromaDB index builder
 │   ├── llm/
 │   │   └── answer_generator.py  # LLM integration (Groq/OpenAI)
 │   ├── preprocessing/           # Modular preprocessing
 │   │   ├── pdf_extractor.py     # PDF → Text extraction
 │   │   ├── text_cleaner.py      # Advanced text cleaning
 │   │   └── text_chunker.py      # Semantic chunking
-│   └── rag_pipeline/
-│       └── pipeline.py          # Main RAG logic
+│   ├── rag_pipeline/
+│   │   └── pipeline.py          # Main RAG logic
+│   └── downloader/
+│       └── fetch_pdfs.py        # IRDAI PDF downloader
 ├── data/
-│   ├── raw_downloaded_pdfs/     # Source PDFs
-│   ├── chunks/                  # Processed chunks
-│   └── vector_store/            # FAISS index
+│   ├── raw_pdfs/                # Source PDFs (93 documents)
+│   ├── processed_text_clean/    # Cleaned extracted text
+│   ├── chunks/                  # Processed chunks (561 chunks)
+│   ├── chromadb/                # ChromaDB vector store
+│   └── evaluation_dataset.json  # Evaluation test queries (15 questions)
 └── docs/                        # Documentation
 ```
 
@@ -194,25 +212,25 @@ Follow-up questions prioritize documents from the previous answer to maintain co
 
 ## Performance
 
-- **Query Time**: ~100-200ms (OpenAI embedding) + <1ms (FAISS search) + 1-3s (LLM)
-- **Total Response Time**: ~1-3 seconds end-to-end
-- **Index Size**: 501 chunks from 93 PDF documents
-- **Storage**: ~6MB (FAISS index for 3072-dim vectors) | ~59MB total
-- **Cost**: ~$0.12/year with OpenAI + Groq | $0/year with free alternative
+- **Query Time**: ~780ms (OpenAI embedding) + <1ms (ChromaDB search) + 1-3s (LLM)
+- **Total Response Time**: ~2-4 seconds end-to-end
+- **Index Size**: 561 chunks from 93 PDF documents
+- **Storage**: ChromaDB index for 3072-dim vectors | ~59MB total
+- **Cost**: ~$0.08 per 1000 queries (OpenAI embeddings + GPT-4o-mini)
 
-## Documentation
+## 📚 Documentation
 
-- [Setup Instructions](docs/setup_instructions.md) - Detailed installation guide
-- [Architecture](docs/architecture.md) - System design and components
-- [System Updates](docs/SYSTEM_UPDATES.md) - Recent changes and improvements
-- [Preprocessing Module](src/preprocessing/README.md) - Modular preprocessing guide
-- [Evaluation](docs/evaluation.md) - Performance metrics and analysis
+| Document | Description |
+|----------|-------------|
+| **[Evaluation & Results](docs/evaluation.md)** | Performance metrics and cost analysis |
+| **[Architecture](docs/architecture.md)** | System design, components, and data flow |
+| **[Setup Instructions](docs/setup_instructions.md)** | Detailed installation and deployment guide |
 
 ## Common Tasks
 
 ### Add New PDFs
 ```bash
-# 1. Place PDFs in data/raw_downloaded_pdfs/
+# 1. Place PDFs in data/raw_pdfs/
 
 # 2. Process new PDFs
 cd src/preprocessing
@@ -235,9 +253,11 @@ python src/downloader/fetch_pdfs.py
 
 ### Change LLM Provider
 ```bash
-# Update .env
-LLM_PROVIDER=groq  # or openai
-GROQ_API_KEY=your_key
+# Update .env to use Groq (free)
+LLM_PROVIDER=groq
+
+# Or use OpenAI (paid, current default)
+LLM_PROVIDER=openai
 
 # Restart API server
 ```
@@ -256,25 +276,32 @@ python text_chunker.py     # Test chunking
 
 ## Troubleshooting
 
-### API won't start
-- Ensure virtual environment is activated
-- Check `pip install uvicorn fastapi`
+### ChromaDB Index Not Found
+- **Solution**: Run `python src/embeddings/build_index.py`
+- **Expected time**: ~5-10 minutes for 561 chunks from 93 documents
+- **Requirements**: OpenAI API key with available credits
 
-### FAISS index not found
-- Run: `python src/embeddings/build_index.py`
+### Rate Limiting (Temporary 429)
+- **Status**: ✅ Automatic retry logic implemented
+- **Behavior**: System retries 3 times with delays (2s, 4s, 8s)
+- **Manual**: If still failing, wait 60 seconds and retry
 
-### LLM errors (429 rate limit)
-- Switch to Groq (higher free tier)
-- Or add retry delays (already implemented)
+### API Won't Start
+- Ensure virtual environment is activated: `anaira312\Scripts\activate`
+- Check installation: `pip install uvicorn fastapi`
+- Verify port not in use: Try `--port 8001`
 
-### Follow-up questions fail
-- Ensure "Use conversation context" is enabled in Streamlit
+### Follow-up Questions Fail
+- Ensure "Use conversation context" is enabled in Streamlit UI
 - Check that conversation_history is being sent to API
+- Verify LLM provider is correctly configured in .env
 
-Built with:
-- **Embeddings**: OpenAI API (text-embedding-3-large) | Alternative: sentence-transformers (local)
-- **Vector Search**: FAISS (Facebook AI)
+## Technology Stack
+
+- **Embeddings**: OpenAI text-embedding-3-large (3072-dim)
+- **LLM**: GPT-4o-mini (OpenAI) with optimized prompt
+- **Vector Store**: ChromaDB with HNSW indexing
 - **Text Processing**: LangChain, pdfplumber, Tesseract OCR
 - **Backend**: FastAPI
 - **Frontend**: Streamlit
-- **LLM**: Groq (free) or OpenAI (paid)
+- **Configuration**: Optimized top_k=3 for best quality/cost balance

@@ -18,7 +18,7 @@ The IRDAI Insurance Circulars RAG system is a conversational AI chatbot built us
                                                  │
                                                  ▼
                                         ┌──────────────┐
-                                        │    FAISS     │
+                                        │   ChromaDB   │
                                         │ Vector Store │
                                         └──────┬───────┘
                                                │
@@ -66,7 +66,7 @@ The IRDAI Insurance Circulars RAG system is a conversational AI chatbot built us
        │
        ▼
   PDF Downloads (93 files)
-  → data/raw_downloaded_pdfs/
+  → data/raw_pdfs/
 ```
 
 **Key Features**:
@@ -135,7 +135,7 @@ The IRDAI Insurance Circulars RAG system is a conversational AI chatbot built us
   └──────────┬─────────────────┘
              │
              ▼
-  Text Chunks (501 chunks)
+  Text Chunks (561 chunks)
   → data/chunks/ (93 .json files)
 ```
 
@@ -178,7 +178,7 @@ The IRDAI Insurance Circulars RAG system is a conversational AI chatbot built us
 │         Embedding & Indexing Layer                      │
 └─────────────────────────────────────────────────────────┘
 
-  Text Chunks (501)
+  Text Chunks (561)
        │
        ▼
   ┌────────────────────────────┐
@@ -193,29 +193,29 @@ The IRDAI Insurance Circulars RAG system is a conversational AI chatbot built us
   └──────────┬─────────────────┘
              │
              ▼
-  Embeddings (501 × 3072)
+  Embeddings (561 × 3072)
              │
              ▼
   ┌────────────────────────────┐
-  │      FAISS Index           │
+  │     ChromaDB Index         │
   ├────────────────────────────┤
-  │ Type: IndexFlatL2          │
+  │ Algorithm: HNSW            │
   │ Distance: L2 (Euclidean)   │
   │ Vectors: 501               │
-  │ Size: ~6MB (3072-dim)      │
+  │ Persistent: SQLite + HNSW  │
   └──────────┬─────────────────┘
              │
              ▼
   ┌────────────────────────────┐
   │    Persistent Storage      │
   ├────────────────────────────┤
-  │ faiss_index.bin   (vectors)│
-  │ chunks.json       (text)   │
-  │ metadata.pkl      (sources)│
+  │ chromadb/  (collection)    │
+  │   ├─ chroma.sqlite3        │
+  │   └─ index/ (HNSW)         │
   └────────────────────────────┘
              │
              ▼
-  data/vector_store/
+  data/chromadb/
 ```
 
 **Embedding Model** (Current Configuration):
@@ -224,7 +224,7 @@ The IRDAI Insurance Circulars RAG system is a conversational AI chatbot built us
 - **Dimension**: 3072 (8x larger than free models)
 - **Quality**: State-of-the-art embedding performance
 - **Cost**: ~$0.13 per million tokens (~$0.01-0.02 for this dataset)
-- **Speed**: API-dependent (~1-2s for batch of 501)
+- **Speed**: API-dependent (~780ms per query average)
 
 **Alternative: Free Local Embeddings**:
 - **Provider**: Sentence Transformers (local)
@@ -234,11 +234,12 @@ The IRDAI Insurance Circulars RAG system is a conversational AI chatbot built us
 - **Speed**: ~500 sentences/second on CPU
 - **Configuration**: Set `EMBEDDING_PROVIDER=sentence-transformers` in `.env`
 
-**FAISS Index**:
-- **Type**: IndexFlatL2 (exact search)
+**ChromaDB Index**:
+- **Algorithm**: HNSW (Hierarchical Navigable Small World)
 - **Distance**: L2 (Euclidean distance)
-- **Search time**: <1ms for 501 vectors
-- **Memory**: ~6MB (for 3072-dim vectors)
+- **Search time**: <1ms for 561 vectors
+- **Storage**: Persistent SQLite database with HNSW index
+- **Benefits**: Built-in persistence, metadata filtering, easy scalability
 
 ---
 
@@ -281,8 +282,9 @@ The IRDAI Insurance Circulars RAG system is a conversational AI chatbot built us
              │
              ▼
   ┌────────────────────────────┐
-  │    FAISS Similarity Search │
+  │  ChromaDB Similarity Search│
   ├────────────────────────────┤
+  │ • HNSW approximate search  │
   │ • Compute L2 distances     │
   │ • Rank by similarity       │
   │ • Return top-K results     │
@@ -337,15 +339,15 @@ The IRDAI Insurance Circulars RAG system is a conversational AI chatbot built us
 **Pipeline Steps**:
 1. **Query Enhancement**: Add context from conversation history for follow-up questions
 2. **Query Embedding**: Convert enhanced question to 3072-dim vector using OpenAI API
-3. **Similarity Search**: Find top-K most similar chunks using FAISS
+3. **Similarity Search**: Find top-K most similar chunks using ChromaDB
 4. **Source Boosting**: Prioritize documents from previous answer (for follow-ups)
 5. **Context Aggregation**: Combine chunks with source citations
 6. **LLM Generation**: Generate natural language answer using retrieved context
 7. **Response Formatting**: Structure with answer, sources, and metadata
 
 **Performance**:
-- Query embedding: ~100-200ms (OpenAI API call)
-- FAISS search: <1ms
+- Query embedding: ~780ms (OpenAI API call)
+- ChromaDB search: <1ms
 - Context formatting: <5ms
 - LLM generation: ~1-3s (Groq/OpenAI)
 - **Total latency**: ~1-3 seconds
@@ -402,8 +404,8 @@ The IRDAI Insurance Circulars RAG system is a conversational AI chatbot built us
      "answer": "...",
      "context": "...",
      "sources": [...],
-     "llm_provider": "groq",
-     "llm_model": "llama-3.3-70b"
+     "llm_provider": "groq/openai",
+     "llm_model": "llama-3.3-70b/gpt-4o-mini"
    }
              │
              ▼
@@ -491,23 +493,23 @@ The IRDAI Insurance Circulars RAG system is a conversational AI chatbot built us
          │
          ▼
 ┌────────────────────────┐
-│ Embeddings (501 × 3072)│
+│ Embeddings (561 × 3072)│
 └────────┬───────────────┘
          │
          ▼
 ┌────────────────────────┐
 │   build_index.py       │
-│  • Create FAISS index  │
+│  • Create ChromaDB     │
 │  • Add vectors         │
-│  • Save to disk        │
+│  • Auto-persist        │
 └────────┬───────────────┘
          │
          ▼
 ┌────────────────────────┐
 │    Vector Store        │
-│  • faiss_index.bin     │
-│  • chunks.json         │
-│  • metadata.pkl        │
+│  • chromadb/           │
+│    ├─ chroma.sqlite3   │
+│    └─ index/           │
 └────────────────────────┘
 ```
 
@@ -533,7 +535,7 @@ The IRDAI Insurance Circulars RAG system is a conversational AI chatbot built us
          │
          ▼
 ┌────────────────────────┐
-│    FAISS.search()      │
+│  ChromaDB.query()      │
 │  • Find top-K similar  │
 └────────┬───────────────┘
          │
@@ -568,7 +570,7 @@ The IRDAI Insurance Circulars RAG system is a conversational AI chatbot built us
 | | langchain-text-splitters | 1.0.0 | Recursive splitter |
 | **Embeddings** | OpenAI API | Latest | text-embedding-3-large (current) |
 | | sentence-transformers | 2.7.0 | Local embeddings (alternative) |
-| **Vector Store** | FAISS | 1.8.0 | Similarity search |
+| **Vector Store** | ChromaDB | 0.4.22 | Similarity search |
 | **LLM Integration** | Groq SDK | Latest | Free LLM API (recommended) |
 | | OpenAI SDK | Latest | Paid LLM API |
 | **Web Backend** | FastAPI | 0.115.12 | REST API server |
@@ -583,7 +585,7 @@ The IRDAI Insurance Circulars RAG system is a conversational AI chatbot built us
 1. **OpenAI Embeddings** (Current):
    - ✅ State-of-the-art quality (3072 dimensions)
    - ✅ Best semantic understanding
-   - ✅ Fast API response (~100-200ms)
+   - ✅ API response time (~780ms average)
    - ✅ Low cost (~$0.02 for this dataset)
    - ✅ No local model management needed
 
@@ -594,12 +596,12 @@ The IRDAI Insurance Circulars RAG system is a conversational AI chatbot built us
    - ✅ Fast on CPU (~500 sentences/sec)
    - ✅ Zero ongoing costs
 
-3. **FAISS**:
-   - ✅ Developed by Facebook AI
-   - ✅ Industry standard
-   - ✅ Extremely fast (<1ms search)
-   - ✅ Memory efficient
-   - ✅ Scales to millions of vectors
+3. **ChromaDB**:
+   - ✅ Open-source vector database
+   - ✅ Built-in persistence (no manual save/load)
+   - ✅ HNSW indexing for fast search (<1ms)
+   - ✅ Metadata filtering capabilities
+   - ✅ Easy to scale and maintain
 
 4. **LangChain**:
    - ✅ Smart text splitting
@@ -652,7 +654,7 @@ The IRDAI Insurance Circulars RAG system is a conversational AI chatbot built us
 - Preprocessing pipeline is fully modular (3 reusable components)
 
 ### 4. Scalability
-- FAISS can handle millions of vectors
+- ChromaDB can handle millions of vectors with HNSW
 - Batch processing for efficiency
 - Optimized data structures
 - FastAPI supports async for concurrent requests
@@ -669,14 +671,14 @@ The IRDAI Insurance Circulars RAG system is a conversational AI chatbot built us
 
 ### Build Time
 - PDF processing: ~5-10 minutes (93 PDFs)
-- Chunking: ~30 seconds (501 chunks)
-- Embedding generation: ~1-2 minutes (501 chunks, OpenAI API)
+- Chunking: ~30 seconds (561 chunks)
+- Embedding generation: ~1-2 minutes (561 chunks, OpenAI API)
 - Index building: <1 second
 - **Total**: ~7-13 minutes
 
 ### Query Time (End-to-End)
-- Query embedding: ~100-200ms (OpenAI API call)
-- FAISS search: <1ms
+- Query embedding: ~780ms (OpenAI API call)
+- ChromaDB search: <1ms
 - Context formatting: ~5ms
 - LLM generation: ~1-3s (Groq/OpenAI)
 - Network latency: ~50-100ms
@@ -686,11 +688,11 @@ The IRDAI Insurance Circulars RAG system is a conversational AI chatbot built us
 - Raw PDFs: ~50MB
 - Processed text: ~2MB
 - Chunks (JSON): ~1MB
-- FAISS index: ~6MB (3072-dim OpenAI embeddings)
+- ChromaDB index: Persistent SQLite with HNSW
 - **Total**: ~59MB
 
 ### Memory
-- FAISS index: ~6MB (loaded in RAM)
+- ChromaDB index: Efficient in-memory caching
 - Runtime (Python + FastAPI): ~200MB
 - Streamlit UI: ~150MB
 - **Peak**: ~400MB
@@ -699,7 +701,7 @@ The IRDAI Insurance Circulars RAG system is a conversational AI chatbot built us
 ## Extensibility
 
 ### Adding New Documents
-1. Place PDFs in `data/raw_downloaded_pdfs/`
+1. Place PDFs in `data/raw_pdfs/`
 2. Run modular preprocessing pipeline:
    ```bash
    cd src/preprocessing
@@ -755,10 +757,12 @@ Each module is independently configurable:
 ## Security Considerations
 
 ### Data Security
-- All document data stays local
-- No external API calls for embeddings
-- Vector store is saved locally
-- LLM API calls only send retrieved context (not full documents)
+- All document data stays local (stored in `data/` folder)
+- External API calls:
+  - **OpenAI API**: For embeddings (query time) and LLM generation
+  - Only retrieved context chunks are sent (not full documents)
+- Vector store is saved locally (ChromaDB)
+- API keys stored securely in `.env` file
 
 ### Input Validation
 - FastAPI validates request schemas with Pydantic

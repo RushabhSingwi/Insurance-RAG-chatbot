@@ -15,7 +15,7 @@ BASE_URL = (
     "&_com_irdai_document_media_IRDAIDocumentMediaPortlet_cur={page}"
 )
 
-OUTPUT_DIR = "data/raw_downloaded_pdfs"
+OUTPUT_DIR = "data/raw_pdfs"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # Change to 1 for testing
