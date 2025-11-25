@@ -1,0 +1,32 @@
+Ref: IRDAI/HLT/CIR/MISC/124/06/2023
+
+Ref: IRDAI/HLT/CIR/MISC/124/06/2023
+All Insurers (except ECGC, AIC) and TPAs
+
+Re: Testing and adoption of Health Claims Exchange (HCX) Specifications and e-claim standards
+1. The current health insurance claims settlement process in the country is mostly manual, non-digital and as such there is no proper data flow/administration in the system resulting in delays in claim processing. Further, the current claims processing lacks standardization across the ecosystem with processes varying Significantly amongst Insurers, TPAs, and Health Care Providers. This not only leads to delays but also results in high processing costs.
+2. With an objective to address the above challenges and streamline the process of claims settlement, it would be beneficial to the insurance sector if insurers and providers get on-boarded to the National Health Claims Exchange (NHCX). This will enable seamless interoperability of health claims processing. The NHCX, along with other building blocks of Ayushman Bharat Digital Mission (ABD\Y), will serve aS a gateway for exchanging claims-related information among Stakeholders present in the health care and health insurance eco-system including ‘Insurers, TPAs, claimants, beneficiaries, health care and wellness providers etc.
+3. NHCX system is designed to be interoperable and machine-readable, apart from
+being auditable and verifiable and would help ensure that the information being
+exchanged is accurate and trustworthy. NHCX will act as a gateway (with
+validation and routing capabilities) for the ecosystem wherein the Insurers/ TPAs
+would send responses for each Fast Healthcare Interoperability Resources
+Standard (FHIR) based on the e-claim submitted by providers via the NHCX
+through standard protocols (APIs). FHIR standards define how healthcare
+information can be exchanged between different computer systems regardless of
+how it is stored in those systems.
+
+4. In the above backdrop, all Insurers and TPAs are hereby advised to test and
+adopt the National Health Claims Exchange (NHCX) specifications and its data
+profiles as part of e-claim standards. NHCX specifications are envisioned to
+enable an open network based on an Open Protocol which has already been
+adopted by National Health Authority with the objective of creating
+interoperability in the health claims data exchange.
+
+5. The National Health Claims Exchange (NHCX) specifications and its data
+profiles as part of e-claim standards along with the sandbox documentation are
+hosted on https://sbxhcx.abdm.gov.in
+
+6. Insurers may on-board themselves to the National Health Claims Exchange
+platform as soon as possible. Insurers and TPAs may also get the healthcare
+providers in their network to join the National Health Claims Exchange platform at the earliest.

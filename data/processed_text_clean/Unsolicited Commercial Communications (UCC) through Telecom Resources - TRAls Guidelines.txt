@@ -1,0 +1,70 @@
+Ref: IRDAI/PP&GR/CIR/MISC/83/05/2024 
+Date: 28 May, 2024
+
+Circular
+To,
+
+All Insurers and Insurance intermediaries (Regulated Entities)
+
+Re: Unsolicited Commercial Communications (UCC) through Telecom
+Resources - TRAl's Guidelines
+1.IRDAI would like to bring recent guidelines of Telecom Regulatory Authority of India
+(TRAI) to the notice of all regulated entities, meant to curb Unsolicited Commercial
+Communications (UCC) through voice calls or messages by using unauthorized
+10-digit mobile numbers and landline numbers.
+2.An IRDAI licensed entity (Regulated Entity/ies), sending a commercial
+communication to its existing or prospective customers shall fulfil TRAI prescribed
+regulatory requirements . A few important provisions of the Guidelines of TRAI in
+this regard are as under:
+2.1.Regulated Entities who wishes to send commercial communication to its
+existing or prospective customers shall get themselves registered with any
+of the Telecom Service Providers;
+2.2. Regulated Entities shall use only the '140/160' numbering series (or any
+other numbering series allocated / assigned by DoT/TRAI in future for
+the purpose) for making commercial calls.
+140 series (currently operational): Exclusively for promotional voice calls
+to existing customers or prospective customers.
+160 series (to be implemented by August, 2024 ): Exclusively for
+transactional and service calls to existing customers.
+
+Entities mixing promotional content with transactional/service calls on the
+160 series is strictly prohibited.
+
+Usage of any other 10-digit fixed/mobile number other than 140/160
+series for making promotional/ service/ transactional voice calls (directly
+or through agents) is strictly forbidden.
+2.3.Registration of Headers for sending SMS messages
+The regulated entities shall ensure that they register their SMS Headers
+with any of Telecom Service Providers (TSPs);
+
+Any commercial communication can only take place using registered
+Headers assigned to the Regulated Entity/ies.
+2.4. Registration of Content Templates
+2.5.
+
+Regulated Entities are required to get message Content Templates
+registered with the Telecom Service Providers.Such registration is required for all type of contents viz fixed as well as
+variable components;
+
+The regulated entities shall ensure that they send their commercial
+communication by engaging only Registered Telemarketers (RTMs) or
+establish the direct connectivity with the Telecom Service Provider for this
+purpose.
+2.6. Onboard the Digital Consent Acquisition (DCA) system deployed by the
+Access Providers for the acquisition of digital consent of the customers
+and integrate the same with systems/ process.
+Be responsible for maintaining he confidentiality and security of their
+customer's data I information, prevention of misuse / leakage thereof,
+and taking corrective I remedial measures in case of misuse/ leakage of
+• such data / information by any person authorised by them or otherwise,
+to handle such data / information including RTMs engaged by such
+regulated entity/ies and their employees, agents, insurance
+intermediaries, associate etc.
+Take steps to spread awareness among customers, in local language as
+well, about the remedial actions/ steps to be taken in various scenarios
+such as ONO Registration, Registration of Complaints etc.
+3. For further information, the regulated entity are advised to refer attached Important
+Guidelines of TRAI for sending commercial communication or visit
+https://trai.gov.in/tcccpr for further detail.
+4. All regulated entities are advised to follow the above referred guideli es of TRAI in
+letter and spirit

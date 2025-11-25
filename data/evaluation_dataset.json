@@ -1,0 +1,128 @@
+[
+  {
+    "question": "What is the threshold for revising insurance premium for senior citizens in India for health insurance?",
+    "ground_truth_answer": "The threshold for revising health insurance premium for senior citizens is 10% per annum. Insurers cannot revise the premium by more than 10% per year without prior consultation with IRDAI.",
+    "relevant_docs": [
+      "Review of revision in premium rates under health insurance policies for senior citizens"
+    ],
+    "context_keywords": ["10%", "per annum", "senior citizens", "prior consultation", "IRDAI"]
+  },
+  {
+    "question": "When was the decision about senior citizen premium revision passed?",
+    "ground_truth_answer": "The decision was passed on 30th January, 2025 (Ref: IRDAI/HLT/CIR/MISC/27/1/2025).",
+    "relevant_docs": [
+      "Review of revision in premium rates under health insurance policies for senior citizens"
+    ],
+    "context_keywords": ["30th January", "2025", "IRDAI/HLT/CIR/MISC/27/1/2025"]
+  },
+  {
+    "question": "What happens if insurers want to increase premium for senior citizens by more than 10%?",
+    "ground_truth_answer": "If insurers want to increase the premium for senior citizens by more than 10% per annum, they must undertake prior consultation with IRDAI before implementing the increase.",
+    "relevant_docs": [
+      "Review of revision in premium rates under health insurance policies for senior citizens"
+    ],
+    "context_keywords": ["more than 10%", "prior consultation", "IRDAI"]
+  },
+  {
+    "question": "What are the cyber security incident reporting requirements for insurers?",
+    "ground_truth_answer": "Insurers must report cyber security incidents to IRDAI. The reporting framework includes timelines for reporting different types of incidents and procedures for incident response.",
+    "relevant_docs": [
+      "Circular on Cyber Incident or Crisis Preparedness",
+      "Circular on Reporting of Cyber Security Incident"
+    ],
+    "context_keywords": ["cyber security", "incident", "reporting", "IRDAI"]
+  },
+  {
+    "question": "What is National Cyber Security Awareness Month (NCSAM)?",
+    "ground_truth_answer": "National Cyber Security Awareness Month (NCSAM) is observed in October. IRDAI has issued circulars directing insurers to observe NCSAM and conduct awareness activities.",
+    "relevant_docs": [
+      "National Cyber Security Awareness Month (NCSAM) 2025",
+      "Observing National Cyber Security Awareness Month (NCSAM)- October 2023"
+    ],
+    "context_keywords": ["NCSAM", "October", "awareness", "cyber security"]
+  },
+  {
+    "question": "What are the rural and social sector obligations for insurers?",
+    "ground_truth_answer": "Insurers must meet specified minimum percentage coverage of lives in rural areas and allocated Gram Panchayats. This includes requirements for health insurance and personal accident coverage in rural, social sector areas and Motor Third Party (MTP) obligations.",
+    "relevant_docs": [
+      "Master Circular on Rural, Social Sector and Motor Third Party Obligations"
+    ],
+    "context_keywords": ["rural", "social sector", "Gram Panchayat", "minimum percentage", "MTP"]
+  },
+  {
+    "question": "What are the guidelines for AYUSH coverage in health insurance?",
+    "ground_truth_answer": "IRDAI has provided guidelines on providing AYUSH (Ayurveda, Yoga & Naturopathy, Unani, Siddha, and Homeopathy) coverage in health insurance policies.",
+    "relevant_docs": [
+      "Guidelines on providing AYUSH coverage in Health Insurance policies"
+    ],
+    "context_keywords": ["AYUSH", "Ayurveda", "health insurance", "coverage"]
+  },
+  {
+    "question": "What is the procedure for motor insurance claims settlement?",
+    "ground_truth_answer": "Motor insurance claims must be settled according to regulations. The procedure includes documentation requirements, timelines for settlement, and provisions for third party claims.",
+    "relevant_docs": [
+      "Master Circular on General Insurance Business"
+    ],
+    "context_keywords": ["motor insurance", "claims", "settlement", "third party"]
+  },
+  {
+    "question": "What are the investment guidelines for insurers in Alternative Investment Funds (AIF)?",
+    "ground_truth_answer": "IRDAI has issued guidelines for monitoring investments in Alternative Investment Funds (AIF). Insurers must comply with investment limits and reporting requirements for AIF investments.",
+    "relevant_docs": [
+      "Monitoring of Investments in Alternative Investment Fund (AIF)"
+    ],
+    "context_keywords": ["AIF", "Alternative Investment Fund", "investment", "monitoring"]
+  },
+  {
+    "question": "What are the expense of management regulations for life insurers?",
+    "ground_truth_answer": "The IRDAI (Expenses of Management of insurers transacting Life Insurance business) Regulations specify limits and guidelines for expenses of management including commission structure, which must be approved by the Board.",
+    "relevant_docs": [
+      "Master Circular on Expenses of Management, including Commission, of Insurers, 2024",
+      "IRDAI (Expenses of Management of insurers transacting Life Insurance business) Regulations 2023 - Clarifications"
+    ],
+    "context_keywords": ["expenses of management", "commission", "life insurance", "regulations"]
+  },
+  {
+    "question": "What is Bima-ASBA and how does it work?",
+    "ground_truth_answer": "Bima-ASBA is a one-time mandate for blocking the amount towards premium through UPI (Unified Payments Interface) for issuance of life and health insurance policies. It works similar to ASBA (Application Supported by Blocked Amount) used in IPOs.",
+    "relevant_docs": [
+      "One-time Mandate for blocking the amount towards premium through UPI for issuance of life and health insurance policies- Bima-ASBA"
+    ],
+    "context_keywords": ["Bima-ASBA", "UPI", "premium", "blocking", "mandate"]
+  },
+  {
+    "question": "What are the guidelines for insurance products for persons with disabilities?",
+    "ground_truth_answer": "IRDAI has issued guidelines for products for Persons with Disabilities (PWD), persons afflicted with HIV/AIDS, and those with mental illness. These guidelines ensure accessibility and non-discrimination in insurance products.",
+    "relevant_docs": [
+      "Product for Persons with Disabilities (PWD), Persons afflicted with HIV_AIDS, and those with Mental Illness",
+      "Modification in Product for PWD, Persons afflicted with HIV_AIDS and those suffering from Mental Illnes"
+    ],
+    "context_keywords": ["PWD", "disabilities", "HIV", "AIDS", "mental illness"]
+  },
+  {
+    "question": "What is the reinsurance submission requirement for insurers?",
+    "ground_truth_answer": "Insurers must submit their Advance Reinsurance Programme and periodic reinsurance returns to IRDAI as per the Master Circular on Reinsurance.",
+    "relevant_docs": [
+      "Master Circular on Reinsurance",
+      "Submission of Advance Reinsurance Programme",
+      "Submission of Reinsurance Returns"
+    ],
+    "context_keywords": ["reinsurance", "submission", "advance programme", "returns"]
+  },
+  {
+    "question": "What are the corporate governance requirements for insurers?",
+    "ground_truth_answer": "The Master Circular on Corporate Governance for Insurers, 2024 specifies requirements for board composition, committees, risk management, internal controls, and compliance framework.",
+    "relevant_docs": [
+      "Master Circular on Corporate Governance for Insurers, 2024"
+    ],
+    "context_keywords": ["corporate governance", "board", "committees", "risk management", "compliance"]
+  },
+  {
+    "question": "What is the Health Claims Exchange (HCX) and what are the requirements?",
+    "ground_truth_answer": "Health Claims Exchange (HCX) is a digital platform for health insurance claim processing. Insurers are required to test and adopt HCX specifications and e-claim standards.",
+    "relevant_docs": [
+      "Testing and adoption of Health Claims Exchange (HCX) Specifications and e-claim standards"
+    ],
+    "context_keywords": ["HCX", "Health Claims Exchange", "e-claim", "digital", "testing"]
+  }
+]
