@@ -67,10 +67,11 @@ class ConversationEntry(BaseModel):
 
 class QueryRequest(BaseModel):
     """Request model for query endpoint."""
-    question: str = Field(..., description="User's question", min_length=1, max_length=500)
+    question: str = Field(..., description="User's question (may be rephrased for retrieval)", min_length=1, max_length=500)
     top_k: int = Field(5, description="Number of results to retrieve", ge=1, le=20)
     conversation_history: Optional[List[ConversationEntry]] = Field(None, description="Previous Q&A pairs for context")
     llm_provider: Optional[str] = Field(None, description="LLM provider to use (openai or groq)")
+    original_question: Optional[str] = Field(None, description="Original question before rephrasing (used for LLM prompt)")
 
 
 class ChunkResult(BaseModel):
@@ -155,11 +156,20 @@ async def query(request: QueryRequest):
     try:
         pipeline = get_pipeline()
 
-        # Execute query with optional LLM provider
+        # Convert Pydantic models to dicts for conversation history
+        conversation_history_dicts = None
+        if request.conversation_history:
+            conversation_history_dicts = [
+                entry.model_dump() for entry in request.conversation_history
+            ]
+
+        # Execute query with optional LLM provider, conversation history, and original question
         result = pipeline.query(
             request.question,
             top_k=request.top_k,
-            llm_provider=request.llm_provider
+            llm_provider=request.llm_provider,
+            conversation_history=conversation_history_dicts,
+            original_question=request.original_question
         )
 
         # Format results

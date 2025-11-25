@@ -279,50 +279,6 @@ def check_api_health() -> Dict:
         return None
 
 
-def get_stats() -> Dict:
-    """Get system statistics."""
-    try:
-        response = requests.get(f"{API_URL}/stats", timeout=5)
-        if response.status_code == 200:
-            return response.json()
-        return None
-    except Exception:
-        return None
-
-
-def rephrase_query_with_context(question: str, conversation_history: list) -> str:
-    """Rephrase query to be standalone using conversation context."""
-    if not conversation_history or len(conversation_history) == 0:
-        return question
-
-    # Get last 2 exchanges for context
-    recent_context = conversation_history[-2:]
-    context_parts = []
-
-    for item in recent_context:
-        if item.get('question') and item.get('answer'):
-            context_parts.append(f"Q: {item['question']}\nA: {item['answer'][:150]}...")
-
-    if not context_parts:
-        return question
-
-    # Create a standalone version of the question
-    context_str = "\n".join(context_parts)
-
-    # Simple rule-based rephrasing for pronouns and references
-    enhanced_question = question
-
-    # If question starts with pronouns/references, make it more explicit
-    reference_words = ['it', 'this', 'that', 'these', 'those', 'they', 'them']
-    first_word = question.split()[0].lower() if question.split() else ""
-
-    if first_word in reference_words or '?' in question[:20]:
-        # Include recent context for better understanding
-        enhanced_question = f"Given the context: {context_parts[-1]}\n\nUser asks: {question}"
-
-    return enhanced_question
-
-
 def is_follow_up_question(question: str) -> bool:
     """Detect if a question is a follow-up question."""
     follow_up_indicators = [
@@ -338,7 +294,7 @@ def is_follow_up_question(question: str) -> bool:
     return any(indicator in first_words or question_lower.startswith(indicator) for indicator in follow_up_indicators)
 
 
-def regenerate_answer_with_context(question: str, merged_results: list, llm_provider: str = None) -> Dict:
+def regenerate_answer_with_context(question: str, merged_results: list, conversation_history: list = None, llm_provider: str = None) -> Dict:
     """Regenerate answer using merged context (for follow-up questions)."""
     try:
         # Format context from merged results
@@ -360,13 +316,48 @@ def regenerate_answer_with_context(question: str, merged_results: list, llm_prov
         sys.path.append(str(Path(__file__).parent.parent / 'src'))
         from llm.answer_generator import AnswerGenerator
 
+        # Prepare conversation history for answer generator (same adaptive logic as query_rag)
+        api_conversation_history = None
+        if conversation_history and len(conversation_history) > 0:
+            # Dynamically determine how many exchanges to send (4-5) based on total token estimate
+            max_exchanges = 5
+            exchanges_to_send = conversation_history[-max_exchanges:]
+
+            api_conversation_history = []
+            total_chars = 0
+            max_total_chars = 3000  # Roughly 750 tokens, safe limit
+
+            for entry in exchanges_to_send:
+                q = entry.get('question', '')
+                a = entry.get('answer', '')
+                s = entry.get('sources', [])[:3]
+
+                entry_chars = len(q) + len(a) + sum(len(src) for src in s)
+
+                if total_chars + entry_chars > max_total_chars:
+                    remaining = max_total_chars - total_chars - len(q) - sum(len(src) for src in s)
+                    if remaining > 200:
+                        api_conversation_history.append({
+                            "question": q,
+                            "answer": a[:remaining] + "...",
+                            "sources": s
+                        })
+                    break
+                else:
+                    api_conversation_history.append({
+                        "question": q,
+                        "answer": a,
+                        "sources": s
+                    })
+                    total_chars += entry_chars
+
         # Generate answer with merged context using selected provider
         provider = llm_provider or st.session_state.get('llm_provider', 'openai')
         generator = AnswerGenerator(provider=provider)
         answer_result = generator.generate_answer(
             question=question,
             context=context,
-            sources=sources
+            conversation_history=api_conversation_history
         )
 
         return {
@@ -380,42 +371,89 @@ def regenerate_answer_with_context(question: str, merged_results: list, llm_prov
         return None
 
 
-def query_rag(question: str, top_k: int = 5, conversation_history: list = None, use_rephrasing: bool = True) -> Dict:
-    """Query the RAG system with conversation context and query rephrasing."""
+def query_rag(question: str, top_k: int = 5, conversation_history: list = None) -> Dict:
+    """Query the RAG system with conversation context."""
     try:
-        # Rephrase query with context if enabled
-        query_to_send = question
+        # Detect if this is a follow-up question (for UI indicators)
         is_follow_up = False
-
-        if use_rephrasing and conversation_history:
+        if conversation_history:
             is_follow_up = is_follow_up_question(question)
-            query_to_send = rephrase_query_with_context(question, conversation_history)
 
         # Prepare conversation history for API
         api_conversation_history = None
         if conversation_history and len(conversation_history) > 0:
-            # Send last 3 exchanges for context
-            # Limit answer length to prevent huge prompts that exceed quota
-            api_conversation_history = [
-                {
-                    "question": entry.get('question', ''),
-                    "answer": entry.get('answer', '')[:500],  # Limit to 500 chars
-                    "sources": entry.get('sources', [])[:3]  # Limit to 3 sources
-                }
-                for entry in conversation_history[-3:]
-            ]
+            # Dynamically determine how many exchanges to send (4-5) based on total token estimate
+            # Start with last 5 exchanges, truncate if needed
+            max_exchanges = 5
+            exchanges_to_send = conversation_history[-max_exchanges:]
+
+            # Build conversation history with adaptive truncation
+            api_conversation_history = []
+            total_chars = 0
+            max_total_chars = 3000  # Roughly 750 tokens, safe limit
+
+            for entry in exchanges_to_send:
+                entry_question = entry.get('question', '')
+                entry_answer = entry.get('answer', '')
+                entry_sources = entry.get('sources', [])[:3]  # Limit to 3 sources
+
+                # Estimate character count for this entry
+                entry_chars = len(entry_question) + len(entry_answer) + sum(len(s) for s in entry_sources)
+
+                # If adding this entry would exceed limit, truncate answer
+                if total_chars + entry_chars > max_total_chars:
+                    # Calculate remaining space
+                    remaining = max_total_chars - total_chars - len(entry_question) - sum(len(s) for s in entry_sources)
+                    if remaining > 200:  # Only include if we have meaningful space
+                        truncated_answer = entry_answer[:remaining] + "..."
+                        api_conversation_history.append({
+                            "question": entry_question,
+                            "answer": truncated_answer,
+                            "sources": entry_sources
+                        })
+                    break  # Stop adding more entries
+                else:
+                    # Add full entry
+                    api_conversation_history.append({
+                        "question": entry_question,
+                        "answer": entry_answer,
+                        "sources": entry_sources
+                    })
+                    total_chars += entry_chars
 
         # Get LLM provider from session state
         llm_provider = st.session_state.get('llm_provider', 'openai')
 
+        # Prepare request payload
+        # Send the original question - let the pipeline handle query rewriting
+        request_payload = {
+            "question": question,  # Original question - pipeline will handle rewriting
+            "top_k": top_k,
+            "conversation_history": api_conversation_history,
+            "llm_provider": llm_provider,
+            "original_question": None  # Not needed - question is already original
+        }
+
+        # DEBUG: Show what's being sent to API
+        if os.getenv("DEBUG", "false").lower() == "true":
+            print("\n" + "="*80)
+            print("DEBUG: REQUEST TO API")
+            print("="*80)
+            print(f"Question: {question}")
+            print(f"Is follow-up: {is_follow_up}")
+            print(f"Conversation history entries: {len(api_conversation_history) if api_conversation_history else 0}")
+            if api_conversation_history:
+                for i, entry in enumerate(api_conversation_history, 1):
+                    print(f"\n  Exchange {i}:")
+                    print(f"    Q: {entry.get('question', '')[:80]}...")
+                    print(f"    A: {entry.get('answer', '')[:80]}...")
+                    print(f"    Sources: {entry.get('sources', [])}")
+            print("="*80)
+
+        # Send both rephrased query (for retrieval) and original question (for LLM prompt)
         response = requests.post(
             f"{API_URL}/query",
-            json={
-                "question": query_to_send,
-                "top_k": top_k,
-                "conversation_history": api_conversation_history,
-                "llm_provider": llm_provider
-            },
+            json=request_payload,
             timeout=30
         )
 
@@ -469,7 +507,7 @@ def query_rag(question: str, top_k: int = 5, conversation_history: list = None, 
 
             # Regenerate answer if we merged contexts
             if needs_answer_regeneration:
-                regenerated = regenerate_answer_with_context(question, result['results'], llm_provider)
+                regenerated = regenerate_answer_with_context(question, result['results'], conversation_history, llm_provider)
                 if regenerated:
                     result['answer'] = regenerated['answer']
                     result['llm_provider'] = regenerated.get('llm_provider')
@@ -487,7 +525,7 @@ def query_rag(question: str, top_k: int = 5, conversation_history: list = None, 
                         supporting_texts[source] = chunk_text
 
             result['supporting_texts'] = supporting_texts
-            result['rephrased_query'] = query_to_send if query_to_send != question else None
+            result['rephrased_query'] = None  # Pipeline handles query rewriting now
             result['is_follow_up'] = is_follow_up
 
             return result
@@ -711,7 +749,11 @@ def main():
         # Query the RAG system
         with st.spinner("🔄 Thinking..."):
             context_to_use = st.session_state.conversation_context
-            result = query_rag(question, top_k, conversation_history=context_to_use, use_rephrasing=use_context)
+            result = query_rag(
+                question,
+                top_k,
+                conversation_history=context_to_use,
+            )
 
             if result and result.get('answer'):
                 # Show rephrased query if different

@@ -16,8 +16,8 @@ try:
 except ImportError:
     pass
 
-# Load environment variables
-load_dotenv()
+# Load environment variables (override=True to ensure .env values take precedence)
+load_dotenv(override=True)
 
 # Get project root (rag-irdai-chatbot directory)
 PROJECT_ROOT = Path(__file__).parent.parent.parent
@@ -28,7 +28,7 @@ EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 # Use absolute path to vector DB to avoid issues when running from different directories
 CHROMADB_VECTOR_DB = os.getenv("CHROMADB_VECTOR_DB", str(PROJECT_ROOT / "data" / "chromadb"))
-TOP_K_RESULTS = int(os.getenv("TOP_K_RESULTS", "5"))
+TOP_K_RESULTS = int(os.getenv("TOP_K_RESULTS", "3"))
 ENABLE_ANSWER_GENERATION = os.getenv("ENABLE_ANSWER_GENERATION", "true").lower() == "true"
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai")
 
@@ -95,18 +95,97 @@ class RAGPipeline:
                 print(f"[WARNING] Could not initialize answer generator: {e}")
                 self.enable_answer_generation = False
 
-    def query(self, question: str, top_k: int = TOP_K_RESULTS, llm_provider: Optional[str] = None) -> Dict:
+    def query(self, question: str, top_k: int = TOP_K_RESULTS, llm_provider: Optional[str] = None, conversation_history: Optional[List[Dict]] = None, original_question: Optional[str] = None) -> Dict:
         """Process a query through the RAG pipeline.
 
         Args:
-            question: The user's question
+            question: The user's question (may be rephrased for better retrieval)
             top_k: Number of results to retrieve
             llm_provider: Optional LLM provider to use ('openai' or 'groq'). If None, uses default.
+            conversation_history: Optional list of previous Q&A pairs for context
+            original_question: Original user question before rephrasing (used for LLM prompt)
         """
-        print(f"\nQuery: {question}")
+        # Use original question for display and LLM, rephrased question for retrieval
+        retrieval_query = question
+        user_question = original_question if original_question else question
+
+        # DEBUG: Show which question will be used
+        if os.getenv("DEBUG", "false").lower() == "true":
+            print("\n" + "="*80)
+            print("DEBUG: QUESTION ROUTING")
+            print("="*80)
+            print(f"Received question (may be rephrased): {question}")
+            print(f"Original question (for LLM): {user_question}")
+            print(f"Retrieval query (initial): {retrieval_query}")
+            print("="*80)
+
+        # LLM-based query rewriting if conversation history is provided
+        if conversation_history and len(conversation_history) > 0 and self.answer_generator:
+            try:
+                # DEBUG: Show conversation history received
+                if os.getenv("DEBUG", "false").lower() == "true":
+                    print("\n" + "="*80)
+                    print("DEBUG: CONVERSATION HISTORY RECEIVED IN PIPELINE")
+                    print("="*80)
+                    print(f"Number of exchanges: {len(conversation_history)}")
+                    for i, entry in enumerate(conversation_history, 1):
+                        print(f"\nExchange {i}:")
+                        print(f"  Q: {entry.get('question', '')[:100]}...")
+                        print(f"  A: {entry.get('answer', '')[:100]}...")
+                        print(f"  Sources: {entry.get('sources', [])}")
+
+                # Format recent conversation context
+                history_context = []
+                for entry in conversation_history[-2:]:  # Last 2 exchanges
+                    q = entry.get('question', '')
+                    a = entry.get('answer', '')[:200]  # Truncate answer
+                    history_context.append(f"Q: {q}\nA: {a}")
+
+                history_str = "\n\n".join(history_context)
+
+                # Use LLM to rewrite query
+                rewrite_prompt = f"Rewrite the following query using prior conversation context so it can be searched standalone. Keep it concise.\n\nHistory:\n{history_str}\n\nQuery: {question}\n\nRewritten query:"
+
+                # DEBUG: Show rewrite prompt
+                if os.getenv("DEBUG", "false").lower() == "true":
+                    print("\n" + "="*80)
+                    print("DEBUG: QUERY REWRITE PROMPT")
+                    print("="*80)
+                    print(rewrite_prompt)
+                    print("="*80)
+
+                if self.answer_generator.provider == "openai":
+                    from langchain_core.messages import HumanMessage
+                    response = self.answer_generator.client.invoke(
+                        [HumanMessage(content=rewrite_prompt)],
+                        temperature=0.3,
+                        max_tokens=50
+                    )
+                    rewritten_query = response.content.strip()
+                elif self.answer_generator.provider == "groq":
+                    response = self.answer_generator.client.chat.completions.create(
+                        model=self.answer_generator.model,
+                        messages=[{"role": "user", "content": rewrite_prompt}],
+                        temperature=0.3,
+                        max_tokens=50
+                    )
+                    rewritten_query = response.choices[0].message.content.strip()
+                else:
+                    rewritten_query = None
+
+                # Use rewritten query if successful
+                if rewritten_query and len(rewritten_query) > 5:
+                    retrieval_query = rewritten_query
+                    print(f"  Query rewritten: {question} → {rewritten_query}")
+            except Exception as e:
+                print(f"  Query rewrite failed: {e}, using original")
+
+        print(f"\nQuery: {user_question}")
+        if retrieval_query != user_question:
+            print(f"  (Retrieval query: {retrieval_query})")
         print(f"Retrieving top {top_k} relevant documents...")
 
-        results = self.vector_store.similarity_search_with_score(question, k=top_k)
+        results = self.vector_store.similarity_search_with_score(retrieval_query, k=top_k)
 
         formatted_results = []
         for doc, distance in results:
@@ -118,7 +197,7 @@ class RAGPipeline:
 
         if not formatted_results:
             return {
-                'question': question,
+                'question': user_question,  # Use original question, not rephrased
                 'answer': 'No relevant documents found.',
                 'context': 'No relevant context found.',
                 'sources': [],
@@ -144,7 +223,7 @@ class RAGPipeline:
                 print(f"  {i}. {result['metadata']['source_file'][:50]}: distance={result['distance']:.4f}")
 
         response = {
-            'question': question,
+            'question': user_question,  # Return original question, not rephrased
             'context': context,
             'sources': sources,
             'results': formatted_results,
@@ -160,16 +239,16 @@ class RAGPipeline:
                     from llm.answer_generator import AnswerGenerator
                     temp_generator = AnswerGenerator(provider=llm_provider)
                     answer_result = temp_generator.generate_answer(
-                        question=question,
+                        question=user_question,  # Use original question for LLM prompt
                         context=context,
-                        sources=sources
+                        conversation_history=conversation_history
                     )
                 else:
                     # Use the default generator
                     answer_result = self.answer_generator.generate_answer(
-                        question=question,
+                        question=user_question,  # Use original question for LLM prompt
                         context=context,
-                        sources=sources
+                        conversation_history=conversation_history
                     )
                 response['answer'] = answer_result.get('answer', 'Failed to generate answer.')
                 response['llm_provider'] = answer_result.get('provider', 'unknown')

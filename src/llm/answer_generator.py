@@ -12,7 +12,7 @@ import os
 from typing import Dict, List, Optional
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=True)
 
 # LLM Provider configuration
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "groq")  # openai, groq, ollama, or huggingface
@@ -44,6 +44,93 @@ class AnswerGenerator:
             self._init_groq()
         else:
             raise ValueError(f"Unsupported provider: {provider}")
+
+        # Store system message as instance attribute
+        self.system_message = f"""You are an AI assistant specialized in Indian insurance regulations from IRDAI (Insurance Regulatory and Development Authority of India).
+
+Your task is to answer questions based ONLY on the provided context from IRDAI circulars. Follow these rules:
+
+1. READ the context CAREFULLY and THOROUGHLY before answering
+2. If the question asks for specific numbers, percentages, thresholds, or limits, LOOK for them explicitly in the context
+3. Provide a direct, concise answer to the question with the EXACT numbers/percentages if mentioned
+4. Use ONLY information from the provided context
+5. Include specific citations from the source documents
+6. If the context doesn't contain the answer, say "I cannot answer this based on the available documents."
+7. Format your answer clearly: main answer first (with numbers/thresholds), then supporting details
+8. Always cite the source document name when providing information
+9. For follow-up questions, refer to the PREVIOUS CONVERSATION context and use the SAME sources if the question relates to previously discussed topics
+10. If asked about dates of decisions/circulars, look for dates at the BEGINNING of the document (common format: "Ref: IRDAI/..." followed by date like "30 January, 2025")
+
+HERE ARE EXAMPLES OF HOW TO ANSWER:
+
+Example 1 - Specific Threshold Question:
+CONTEXT:
+[Source: Review of revision in premium rates under health insurance policies for senior citizens]
+Ref: IRDAI/HLT/CIR/MISC/27/1/2025
+30th January, 2025
+
+The IRDAI hereby directs all general and health insurers to take the following steps:
+a) The insurers shall not revise the premium for senior citizens by more than 10% per annum.
+b) If the increase proposed in the premium for senior citizens is more than 10% per annum, insurers shall undertake prior consultation with the IRDAI.
+
+QUESTION: What is the threshold for revising insurance premium for senior citizens in India for health insurance?
+
+CORRECT ANSWER:
+The threshold for revising health insurance premium for senior citizens is **10% per annum**. Insurers cannot revise the premium by more than 10% per year without prior consultation with IRDAI.
+
+**Source:** Review of revision in premium rates under health insurance policies for senior citizens (Ref: IRDAI/HLT/CIR/MISC/27/1/2025)
+
+---
+
+Example 2 - Follow-up Question About Date:
+PREVIOUS CONVERSATION:
+Q1: What is the threshold for revising insurance premium for senior citizens?
+A1: The threshold is 10% per annum.
+Sources used: Review of revision in premium rates under health insurance policies for senior citizens
+
+IMPORTANT: The current question is about the date. Look for the date in the CONTEXT from the source mentioned in the previous conversation: "Review of revision in premium rates under health insurance policies for senior citizens"
+
+CONTEXT:
+[Source: Review of revision in premium rates under health insurance policies for senior citizens]
+Ref: IRDAI/HLT/CIR/MISC/27/1/2025
+30th January, 2025
+
+The IRDAI hereby directs all general and health insurers...
+
+[Source: Amendment to Circular on Procedure]
+Ref: IRDAI/IID/CIR/MISC/175/10/2023
+9th October, 2023
+
+QUESTION: When was this decision passed?
+
+CORRECT ANSWER:
+This decision was passed on **30th January, 2025**.
+
+**Source:** Review of revision in premium rates under health insurance policies for senior citizens (Ref: IRDAI/HLT/CIR/MISC/27/1/2025, dated 30th January, 2025)
+
+**Explanation:** I found the date in the same document that was referenced in the previous answer about the 10% threshold for senior citizens.
+
+---
+
+Example 3 - Follow-up About Additional Details:
+PREVIOUS CONVERSATION:
+Q: What is the threshold for revising insurance premium for senior citizens?
+A: The threshold is 10% per annum.
+
+CONTEXT:
+[Source: Review of revision in premium rates under health insurance policies for senior citizens]
+a) The insurers shall not revise the premium for senior citizens by more than 10% per annum.
+b) If the increase proposed in the premium for senior citizens is more than 10% per annum, insurers shall undertake prior consultation with the IRDAI.
+c) In case of withdrawal of individual health insurance products offered to senior citizens, insurers shall undertake prior consultation with the IRDAI.
+
+QUESTION: What happens if they want to increase more than this?
+
+CORRECT ANSWER:
+If insurers want to increase the premium for senior citizens by more than 10% per annum, they must undertake **prior consultation with IRDAI** before implementing the increase.
+
+**Source:** Review of revision in premium rates under health insurance policies for senior citizens
+
+---"""
 
     def _init_openai(self):
         """Initialize OpenAI client using LangChain."""
@@ -85,14 +172,13 @@ class AnswerGenerator:
         except ImportError:
             raise ImportError("Please install groq: pip install groq")
 
-    def create_prompt(self, question: str, context: str, sources: List[str], conversation_history: Optional[List[Dict]] = None) -> str:
+    def create_prompt(self, question: str, context: str, conversation_history: Optional[List[Dict]] = None) -> str:
         """
-        Create a prompt for the LLM with few-shot examples and conversation context.
+        Create a prompt for the LLM with conversation context.
 
         Args:
             question: User's question
             context: Retrieved context from RAG
-            sources: List of source documents
             conversation_history: Optional list of previous Q&A pairs for follow-up questions
 
         Returns:
@@ -102,179 +188,31 @@ class AnswerGenerator:
         conversation_context = ""
         if conversation_history and len(conversation_history) > 0:
             conversation_context = "\n\nPREVIOUS CONVERSATION:\n"
-            conversation_context += "(Use these sources to answer follow-up questions about dates, details, or clarifications)\n\n"
-            for i, entry in enumerate(conversation_history[-3:], 1):  # Last 3 exchanges
-                conversation_context += f"Q{i}: {entry.get('question', '')}\n"
-                conversation_context += f"A{i}: {entry.get('answer', '')[:300]}...\n"
-                if entry.get('sources'):
-                    conversation_context += f"Sources used: {', '.join(entry['sources'][:3])}\n"
-                conversation_context += "\n"
-            conversation_context += "IMPORTANT: If the current question asks about dates, decisions, or additional details related to the above conversation, retrieve information from the SAME sources mentioned above.\n"
+            for entry in conversation_history[-3:]:  # Last 3 exchanges
+                conversation_context += f"User: {entry.get('question', '')}\n"
+                conversation_context += f"Assistant: {entry.get('answer', '')[:300]}...\n\n"
 
-        prompt = f"""You are an expert AI assistant for IRDAI (Insurance Regulatory and Development Authority of India) insurance regulations. Your role is to provide accurate, helpful answers based EXCLUSIVELY on the provided context documents.
-
-═══════════════════════════════════════════════════════════════════════════════
-CRITICAL GROUNDING RULES - NEVER VIOLATE THESE:
-═══════════════════════════════════════════════════════════════════════════════
-
-1. ✓ ONLY use information from the CONTEXT section below
-2. ✗ NEVER use your training data, general knowledge, or make assumptions
-3. ✓ If the answer requires synthesis from MULTIPLE parts of the context, do so
-4. ✓ If information is IMPLIED or can be REASONABLY INFERRED from the context, state it clearly
-5. ✗ If the answer is NOT in the context (even partially), respond: "I cannot answer this based on the available documents."
-
-═══════════════════════════════════════════════════════════════════════════════
-HOW TO EXTRACT INFORMATION FROM CONTEXT:
-═══════════════════════════════════════════════════════════════════════════════
-
-STEP 1: SCAN ALL CONTEXT THOROUGHLY
-- Read through ALL provided context chunks, not just the first one
-- Key information may be split across multiple chunks from the same document
-- Look for: numbers, dates, percentages, procedures, requirements, definitions
-
-STEP 2: IDENTIFY RELEVANT INFORMATION
-- Extract EXACT values: numbers, percentages, dates, thresholds
-- Note document references: "Ref: IRDAI/..." and dates at document beginnings
-- Capture procedural details: requirements, steps, conditions, obligations
-- Synthesize if information appears in multiple chunks
-
-STEP 3: STRUCTURE YOUR ANSWER
-- Start with DIRECT ANSWER (include specific numbers/thresholds/dates)
-- Add supporting details if present in context
-- Cite source document(s)
-- Use clear formatting (bold for key facts)
-
-STEP 4: DATE EXTRACTION PROTOCOL
-- Dates often appear at document START: "Date: [DD Month YYYY]" or within "Ref:" line
-- Sometimes dates are in format: "DD.MM.YYYY" or "DD/MM/YYYY"
-- Look for phrases like "dated", "passed on", "issued on"
-- If date is partially readable (e.g., "00 January" due to OCR), infer from reference number
-
-═══════════════════════════════════════════════════════════════════════════════
-SPECIAL CASES:
-═══════════════════════════════════════════════════════════════════════════════
-
-DEFINITIONS/CONCEPTS (e.g., "What is X?"):
-- Provide complete definition synthesized from all relevant context
-- Include purpose, mechanism, scope, and key features
-- Example: If asked "What is Bima-ASBA?", combine all context about it into coherent explanation
-
-REQUIREMENTS/PROCEDURES (e.g., "What are the requirements for X?"):
-- List all requirements/steps found in context
-- Maintain numbering if present
-- Clarify if requirements are mandatory vs optional
-
-COMPARISONS/MULTIPLE ITEMS:
-- Synthesize information across context chunks
-- Create structured comparison if helpful
-- Ensure all facts come from provided context
-
-═══════════════════════════════════════════════════════════════════════════════
-EXAMPLES OF CORRECT ANSWERING:
-═══════════════════════════════════════════════════════════════════════════════
-
-Example 1 - EXTRACTING SPECIFIC VALUES:
-CONTEXT:
-[Source: Review of revision in premium rates under health insurance policies for senior citizens]
-Ref: IRDAI/HLT/CIR/MISC/27/1/2025
-Date: 30th January, 2025
-The IRDAI hereby directs:
-a) Insurers shall not revise premium for senior citizens by more than 10% per annum.
-b) For increases above 10%, prior consultation with IRDAI is required.
-
-QUESTION: What is the threshold for revising insurance premium for senior citizens?
-
-✓ CORRECT ANSWER:
-The threshold for revising health insurance premium for senior citizens is **10% per annum**. Insurers cannot increase premiums by more than 10% per year without prior consultation with IRDAI.
-
-**Source:** Review of revision in premium rates under health insurance policies for senior citizens (Ref: IRDAI/HLT/CIR/MISC/27/1/2025)
-
----
-
-Example 2 - EXTRACTING DATES:
-CONTEXT:
-[Source: Review of revision in premium rates under health insurance policies for senior citizens]
-Ref: IRDAI/HLT/CIR/MISC/27/1/2025
-Date: 30th January, 2025
-The IRDAI hereby directs all general and health insurers...
-
-QUESTION: When was the decision about senior citizen premium revision passed?
-
-✓ CORRECT ANSWER:
-The decision was passed on **30th January, 2025** (Reference: IRDAI/HLT/CIR/MISC/27/1/2025).
-
-**Source:** Review of revision in premium rates under health insurance policies for senior citizens
-
----
-
-Example 3 - SYNTHESIZING DEFINITION FROM MULTIPLE CHUNKS:
-CONTEXT (multiple chunks from same document):
-[Chunk 1] Bima-ASBA stands for Bima Applications Supported by Blocked Amount. It is a facility using UPI One Time Mandate (OTM) for premium payment.
-[Chunk 2] Under Bima-ASBA, insurers can block premium amount in prospect's bank account via UPI. Amount is debited only after proposal acceptance.
-[Chunk 3] If proposal rejected, blocked amount is automatically released. Mandate valid for maximum 14 days.
-
-QUESTION: What is Bima-ASBA and how does it work?
-
-✓ CORRECT ANSWER:
-**Bima-ASBA** (Bima Applications Supported by Blocked Amount) is a premium payment facility using UPI One Time Mandate that allows insurers to block funds in a prospect's bank account for insurance premium.
-
-**How it works:**
-1. Insurer blocks the premium amount in the prospect's account via UPI
-2. Funds remain blocked (not debited) until underwriting decision is made
-3. If proposal is accepted: Amount is debited and policy is issued
-4. If proposal is rejected: Blocked amount is automatically released
-5. Mandate is valid for maximum 14 days
-
-**Source:** One-time Mandate for blocking the amount towards premium through UPI for issuance of life and health insurance policies- Bima-ASBA
-
----
-
-Example 4 - LISTING REQUIREMENTS:
-CONTEXT:
-[Source: Master Circular on Rural Obligations]
-Every insurer shall:
-a) Cover minimum 15% of lives in allocated Gram Panchayats
-b) Submit quarterly reports to IRDAI
-c) Obtain certificates from Gram Sachiv
-d) Coordinate with respective Councils
-
-QUESTION: What are the rural sector obligations for insurers?
-
-✓ CORRECT ANSWER:
-Insurers must fulfill the following rural sector obligations:
-
-1. **Coverage:** Cover minimum 15% of lives in allocated Gram Panchayats
-2. **Reporting:** Submit quarterly reports to IRDAI
-3. **Certification:** Obtain certificates from Gram Sachiv
-4. **Coordination:** Coordinate with respective Councils
-
-**Source:** Master Circular on Rural Obligations
-
----
-
-═══════════════════════════════════════════════════════════════════════════════
-NOW ANSWER THE USER'S QUESTION
-═══════════════════════════════════════════════════════════════════════════════
-{conversation_context}
-
-CONTEXT (Read ALL chunks carefully - information may be split across multiple chunks):
+        prompt = f"""CONTEXT:
 {context}
 
-SOURCE DOCUMENTS AVAILABLE:
-{', '.join(sources)}
+CONVERSATION HISTORY:
+{conversation_context}
 
 USER QUESTION:
 {question}
 
-INSTRUCTIONS FOR YOUR ANSWER:
-1. Scan ALL context chunks above thoroughly
-2. Extract relevant information (numbers, dates, procedures, definitions)
-3. Synthesize if information is split across chunks
-4. Format answer with key facts in bold
-5. Cite source document(s)
-6. If answer not found in context, respond: "I cannot answer this based on the available documents."
+NOW ANSWER BASED ON THE CONTEXT."""
 
-YOUR ANSWER (with citations):"""
+        # DEBUG: Show complete prompt
+        if os.getenv("DEBUG", "false").lower() == "true":
+            print("\n" + "="*80)
+            print("DEBUG: FULL LLM PROMPT")
+            print("="*80)
+            print("SYSTEM MESSAGE (first 500 chars):")
+            print(self.system_message[:500] + "...")
+            print("\nUSER PROMPT:")
+            print(prompt)
+            print("="*80)
 
         return prompt
 
@@ -282,7 +220,6 @@ YOUR ANSWER (with citations):"""
         self,
         question: str,
         context: str,
-        sources: List[str],
         temperature: float = 0.1,
         max_tokens: int = 500,
         conversation_history: Optional[List[Dict]] = None
@@ -293,7 +230,6 @@ YOUR ANSWER (with citations):"""
         Args:
             question: User's question
             context: Retrieved context from RAG
-            sources: List of source documents
             temperature: LLM temperature (lower = more deterministic)
             max_tokens: Maximum tokens in response
             conversation_history: Optional list of previous Q&A pairs for context
@@ -301,7 +237,7 @@ YOUR ANSWER (with citations):"""
         Returns:
             Dictionary with 'answer' and 'provider' keys
         """
-        prompt = self.create_prompt(question, context, sources, conversation_history)
+        prompt = self.create_prompt(question, context, conversation_history)
 
         try:
             if self.provider == "openai":
@@ -327,7 +263,7 @@ YOUR ANSWER (with citations):"""
             try:
                 # Create messages for LangChain
                 messages = [
-                    SystemMessage(content="You are an expert IRDAI insurance regulations assistant. You must answer ONLY using the provided context. Synthesize information from multiple chunks when needed. Extract exact values, dates, and procedures. Do NOT use your training data. If the answer is not in the context, say 'I cannot answer this based on the available documents.'"),
+                    SystemMessage(content=self.system_message),
                     HumanMessage(content=prompt)
                 ]
 
@@ -357,8 +293,22 @@ YOUR ANSWER (with citations):"""
                     print(f"  Total tokens: {tokens_used}")
                     print(f"  Model: {self.model}")
 
+                answer_text = response.content.strip()
+
+                # DEBUG: Show LLM response
+                if os.getenv("DEBUG", "false").lower() == "true":
+                    print("\n" + "="*80)
+                    print("DEBUG: LLM RESPONSE")
+                    print("="*80)
+                    print(f"Provider: OpenAI")
+                    print(f"Model: {self.model}")
+                    print(f"Tokens used: {tokens_used}")
+                    print(f"Answer (first 300 chars):")
+                    print(answer_text[:300] + "...")
+                    print("="*80)
+
                 return {
-                    "answer": response.content.strip(),
+                    "answer": answer_text,
                     "provider": "openai",
                     "model": self.model,
                     "tokens_used": tokens_used,
@@ -404,7 +354,7 @@ YOUR ANSWER (with citations):"""
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are an expert IRDAI insurance regulations assistant. You must answer ONLY using the provided context. Synthesize information from multiple chunks when needed. Extract exact values, dates, and procedures. Do NOT use your training data. If the answer is not in the context, say 'I cannot answer this based on the available documents.'"
+                        "content": self.system_message
                     },
                     {
                         "role": "user",
@@ -415,11 +365,26 @@ YOUR ANSWER (with citations):"""
                 max_tokens=max_tokens,
             )
 
+            answer_text = response.choices[0].message.content.strip()
+            tokens = response.usage.total_tokens if hasattr(response, 'usage') else None
+
+            # DEBUG: Show LLM response
+            if os.getenv("DEBUG", "false").lower() == "true":
+                print("\n" + "="*80)
+                print("DEBUG: LLM RESPONSE")
+                print("="*80)
+                print(f"Provider: Groq")
+                print(f"Model: {self.model}")
+                print(f"Tokens used: {tokens}")
+                print(f"Answer (first 300 chars):")
+                print(answer_text[:300] + "...")
+                print("="*80)
+
             return {
-                "answer": response.choices[0].message.content.strip(),
+                "answer": answer_text,
                 "provider": "groq",
                 "model": self.model,
-                "tokens_used": response.usage.total_tokens if hasattr(response, 'usage') else None
+                "tokens_used": tokens
             }
         except Exception as e:
             print(f"[ERROR] Groq API call failed: {e}")
@@ -441,9 +406,8 @@ if __name__ == "__main__":
     This decision was made on 30th January 2025 to provide flexibility to insurers while protecting consumers.
     For revisions above 10%, prior approval from IRDAI is required.
     """
-    sources = ["IRDAI Circular on Health Insurance Premium"]
 
-    result = generator.generate_answer(question, context, sources)
+    result = generator.generate_answer(question, context)
     print(f"\nQuestion: {question}")
     print(f"\nAnswer:\n{result['answer']}")
     print(f"\nProvider: {result['provider']}")

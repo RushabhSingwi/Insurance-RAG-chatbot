@@ -19,8 +19,8 @@ try:
 except ImportError:
     pass
 
-# Load environment variables
-load_dotenv()
+# Load environment variables (override=True to ensure .env values take precedence)
+load_dotenv(override=True)
 
 # Configuration
 EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", "huggingface")
