@@ -4,30 +4,21 @@ FastAPI Backend for IRDAI Insurance Circulars RAG System
 This API provides endpoints for querying the RAG system.
 """
 
-import os
 import sys
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import List, Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from dotenv import load_dotenv
 
 # Add parent directory to path
 sys.path.append(str(Path(__file__).parent.parent))
 
+from config import get_config
 from rag_pipeline.pipeline import RAGPipeline
 
-# Load environment variables from project root
-project_root = Path(__file__).parent.parent.parent
-env_path = project_root / ".env"
-
-# CRITICAL FIX: Clear any system-wide environment variables that may be wrong
-# This ensures .env file values take precedence
-if 'OPENAI_API_KEY' in os.environ:
-    del os.environ['OPENAI_API_KEY']
-
-load_dotenv(dotenv_path=env_path, override=True)  # Force override of existing env vars
+# Load configuration
+config = get_config()
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -124,19 +115,11 @@ async def health_check():
         # Get collection count from ChromaDB
         index_size = pipeline.vector_store._collection.count()
 
-        # Get embedding dimension based on provider
-        if os.getenv("EMBEDDING_PROVIDER", "huggingface") == "huggingface":
-            embedding_dim = 384  # sentence-transformers/all-MiniLM-L6-v2
-            model_name = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
-        else:
-            embedding_dim = 1536  # OpenAI text-embedding-3-small
-            model_name = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
-
         return HealthResponse(
             status="healthy",
             index_size=index_size,
-            embedding_model=model_name,
-            embedding_dimension=embedding_dim
+            embedding_model=config.EMBEDDING_MODEL,
+            embedding_dimension=config.EMBEDDING_DIMENSION
         )
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Service unavailable: {str(e)}")
@@ -211,11 +194,6 @@ async def get_stats():
         # Get collection data from ChromaDB
         total_documents = pipeline.vector_store._collection.count()
 
-        # Get embedding config
-        embedding_provider = os.getenv("EMBEDDING_PROVIDER", "huggingface")
-        embedding_model = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
-        embedding_dim = 384 if embedding_provider == "huggingface" else 1536
-
         # Get all metadata to calculate unique sources
         if total_documents > 0:
             all_data = pipeline.vector_store._collection.get(limit=total_documents)
@@ -225,9 +203,9 @@ async def get_stats():
 
         return {
             "total_documents": total_documents,
-            "embedding_dimension": embedding_dim,
-            "embedding_provider": embedding_provider,
-            "embedding_model": embedding_model,
+            "embedding_dimension": config.EMBEDDING_DIMENSION,
+            "embedding_provider": config.EMBEDDING_PROVIDER,
+            "embedding_model": config.EMBEDDING_MODEL,
             "total_chunks": total_documents,
             "unique_sources": unique_sources
         }

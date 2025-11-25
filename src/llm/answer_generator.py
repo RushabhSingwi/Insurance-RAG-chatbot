@@ -1,39 +1,51 @@
 """
-Answer Generation Module using LLM APIs
+Answer Generation Module
 
-Supports multiple LLM providers:
-1. OpenAI API
-2. Groq API (Free tier - Fast inference)
-3. Ollama (Local - Completely free)
-4. HuggingFace Inference API (Free tier)
+Generates answers from retrieved context using LLM APIs.
+Supports multiple providers: OpenAI and Groq.
+Includes conversation history support and retry logic for rate limiting.
 """
 
-import os
+import sys
+import time
+import traceback
+from pathlib import Path
 from typing import Dict, List, Optional
-from dotenv import load_dotenv
 
-load_dotenv(override=True)
+from langchain_openai import ChatOpenAI
+from langchain_core.messages import SystemMessage, HumanMessage
+from groq import Groq
 
-# LLM Provider configuration
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", "groq")  # openai, groq, ollama, or huggingface
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+# Add src directory to path for imports
+sys.path.append(str(Path(__file__).parent.parent))
+from config import get_config
+from utils.debug_utils import is_debug_basic, is_debug_verbose, print_debug_header, print_debug_footer
+
+# Load configuration
+config = get_config()
+
+# Constants
+MAX_CONVERSATION_HISTORY = 3  # Keep last N exchanges
+MAX_ANSWER_LENGTH = 200  # Characters for conversation context
+RATE_LIMIT_RETRY_COUNT = 3
+RATE_LIMIT_BASE_DELAY = 1  # seconds
 
 class AnswerGenerator:
     """
     Generate answers from retrieved context using LLMs.
+
+    Supports OpenAI and Groq providers with conversation history,
+    token tracking, and rate limit handling.
     """
 
-    def __init__(self, provider: str = LLM_PROVIDER):
+    def __init__(self, provider: Optional[str] = None):
         """
         Initialize the answer generator.
 
         Args:
-            provider: LLM provider to use ('openai', 'groq', 'ollama', or 'huggingface')
+            provider: LLM provider to use ('openai' or 'groq'). If None, uses default from config.
         """
-        self.provider = provider.lower()
+        self.provider = (provider or config.LLM_PROVIDER).lower()
         self.client = None
 
         print(f"Initializing Answer Generator with provider: {self.provider}")
@@ -43,7 +55,7 @@ class AnswerGenerator:
         elif self.provider == "groq":
             self._init_groq()
         else:
-            raise ValueError(f"Unsupported provider: {provider}")
+            raise ValueError(f"Unsupported provider: {self.provider}. Must be 'openai' or 'groq'.")
 
         # Store system message as instance attribute
         self.system_message = f"""You are an AI assistant specialized in Indian insurance regulations from IRDAI (Insurance Regulatory and Development Authority of India).
@@ -132,41 +144,37 @@ If insurers want to increase the premium for senior citizens by more than 10% pe
 
 ---"""
 
-    def _init_openai(self):
+    def _init_openai(self) -> None:
         """Initialize OpenAI client using LangChain."""
         try:
-            from langchain_openai import ChatOpenAI
-
-            if not OPENAI_API_KEY:
+            if not config.OPENAI_API_KEY:
                 raise ValueError(
                     "OPENAI_API_KEY not found in environment variables. "
                     "Get an API key from: https://platform.openai.com/api-keys"
                 )
 
             self.client = ChatOpenAI(
-                model=OPENAI_MODEL,
-                api_key=OPENAI_API_KEY,
+                model=config.OPENAI_MODEL,
+                api_key=config.OPENAI_API_KEY,
                 temperature=0.1
             )
-            self.model = OPENAI_MODEL
+            self.model = config.OPENAI_MODEL
             print(f"OpenAI ChatOpenAI initialized with model: {self.model}")
 
         except ImportError:
             raise ImportError("Please install langchain-openai: pip install langchain-openai")
 
-    def _init_groq(self):
+    def _init_groq(self) -> None:
         """Initialize Groq client."""
         try:
-            from groq import Groq
-
-            if not GROQ_API_KEY:
+            if not config.GROQ_API_KEY:
                 raise ValueError(
                     "GROQ_API_KEY not found in environment variables. "
                     "Get a free API key from: https://console.groq.com"
                 )
 
-            self.client = Groq(api_key=GROQ_API_KEY)
-            self.model = GROQ_MODEL
+            self.client = Groq(api_key=config.GROQ_API_KEY)
+            self.model = config.GROQ_MODEL
             print(f"Groq client initialized with model: {self.model}")
 
         except ImportError:
@@ -188,9 +196,10 @@ If insurers want to increase the premium for senior citizens by more than 10% pe
         conversation_context = ""
         if conversation_history and len(conversation_history) > 0:
             conversation_context = "\n\nPREVIOUS CONVERSATION:\n"
-            for entry in conversation_history[-3:]:  # Last 3 exchanges
+            for entry in conversation_history[-MAX_CONVERSATION_HISTORY:]:
                 conversation_context += f"User: {entry.get('question', '')}\n"
-                conversation_context += f"Assistant: {entry.get('answer', '')[:300]}...\n\n"
+                answer_preview = entry.get('answer', '')[:MAX_ANSWER_LENGTH]
+                conversation_context += f"Assistant: {answer_preview}...\n\n"
 
         prompt = f"""CONTEXT:
 {context}
@@ -203,16 +212,14 @@ USER QUESTION:
 
 NOW ANSWER BASED ON THE CONTEXT."""
 
-        # DEBUG: Show complete prompt
-        if os.getenv("DEBUG", "false").lower() == "true":
-            print("\n" + "="*80)
-            print("DEBUG: FULL LLM PROMPT")
-            print("="*80)
+        # DEBUG: Show complete prompt (VERBOSE only)
+        if is_debug_verbose():
+            print_debug_header("FULL LLM PROMPT", level=2)
             print("SYSTEM MESSAGE (first 500 chars):")
             print(self.system_message[:500] + "...")
             print("\nUSER PROMPT:")
             print(prompt)
-            print("="*80)
+            print_debug_footer(level=2)
 
         return prompt
 
@@ -252,14 +259,18 @@ NOW ANSWER BASED ON THE CONTEXT."""
             }
 
     def _generate_openai(self, prompt: str, temperature: float, max_tokens: int) -> Dict[str, str]:
-        """Generate answer using LangChain ChatOpenAI with retry logic for rate limits."""
-        import time
-        from langchain_core.messages import SystemMessage, HumanMessage
+        """
+        Generate answer using LangChain ChatOpenAI with retry logic for rate limits.
 
-        max_retries = 3
-        base_delay = 2  # seconds
+        Args:
+            prompt: User prompt with context
+            temperature: LLM temperature parameter
+            max_tokens: Maximum tokens in response
 
-        for attempt in range(max_retries):
+        Returns:
+            Dictionary with answer, provider, model, and token usage
+        """
+        for attempt in range(RATE_LIMIT_RETRY_COUNT):
             try:
                 # Create messages for LangChain
                 messages = [
@@ -285,27 +296,22 @@ NOW ANSWER BASED ON THE CONTEXT."""
                     prompt_tokens = token_usage.get('prompt_tokens')
                     completion_tokens = token_usage.get('completion_tokens')
 
-                # Log token usage
-                if tokens_used:
-                    print(f"\n[OpenAI Token Usage]")
-                    print(f"  Prompt tokens: {prompt_tokens}")
-                    print(f"  Completion tokens: {completion_tokens}")
-                    print(f"  Total tokens: {tokens_used}")
-                    print(f"  Model: {self.model}")
-
                 answer_text = response.content.strip()
 
-                # DEBUG: Show LLM response
-                if os.getenv("DEBUG", "false").lower() == "true":
-                    print("\n" + "="*80)
-                    print("DEBUG: LLM RESPONSE")
-                    print("="*80)
-                    print(f"Provider: OpenAI")
+                # DEBUG: Basic level - Token usage summary
+                if is_debug_basic():
+                    print(f"\n[LLM Token Usage] Provider: OpenAI | Model: {self.model}")
+                    print(f"  Prompt: {prompt_tokens} | Completion: {completion_tokens} | Total: {tokens_used}")
+
+                # DEBUG: Verbose level - Full response details
+                if is_debug_verbose():
+                    print_debug_header("LLM RESPONSE (OpenAI)", level=2)
                     print(f"Model: {self.model}")
-                    print(f"Tokens used: {tokens_used}")
-                    print(f"Answer (first 300 chars):")
+                    print(f"Total tokens: {tokens_used} (prompt: {prompt_tokens}, completion: {completion_tokens})")
+                    print(f"\nAnswer (first 300 chars):")
                     print(answer_text[:300] + "...")
-                    print("="*80)
+                    print(f"\nFull answer length: {len(answer_text)} chars")
+                    print_debug_footer(level=2)
 
                 return {
                     "answer": answer_text,
@@ -320,9 +326,9 @@ NOW ANSWER BASED ON THE CONTEXT."""
                 error_msg = str(e)
 
                 # Check if it's a rate limit error (429)
-                if "429" in error_msg and attempt < max_retries - 1:
-                    delay = base_delay * (2 ** attempt)  # Exponential backoff: 2, 4, 8 seconds
-                    print(f"\n[WARN] Rate limit hit. Retrying in {delay} seconds... (Attempt {attempt + 1}/{max_retries})")
+                if "429" in error_msg and attempt < RATE_LIMIT_RETRY_COUNT - 1:
+                    delay = RATE_LIMIT_BASE_DELAY * (2 ** attempt)  # Exponential backoff
+                    print(f"\n[WARN] Rate limit hit. Retrying in {delay} seconds... (Attempt {attempt + 1}/{RATE_LIMIT_RETRY_COUNT})")
                     time.sleep(delay)
                     continue  # Retry
 
@@ -342,7 +348,6 @@ NOW ANSWER BASED ON THE CONTEXT."""
                     print("  - Upgrade tier: https://platform.openai.com/settings/organization/billing")
                     print("  - Or switch to Groq (free): Set LLM_PROVIDER=groq in .env")
 
-                import traceback
                 traceback.print_exc()
                 raise
 
@@ -367,18 +372,23 @@ NOW ANSWER BASED ON THE CONTEXT."""
 
             answer_text = response.choices[0].message.content.strip()
             tokens = response.usage.total_tokens if hasattr(response, 'usage') else None
+            prompt_tokens = response.usage.prompt_tokens if hasattr(response, 'usage') else None
+            completion_tokens = response.usage.completion_tokens if hasattr(response, 'usage') else None
 
-            # DEBUG: Show LLM response
-            if os.getenv("DEBUG", "false").lower() == "true":
-                print("\n" + "="*80)
-                print("DEBUG: LLM RESPONSE")
-                print("="*80)
-                print(f"Provider: Groq")
+            # DEBUG: Basic level - Token usage summary
+            if is_debug_basic():
+                print(f"\n[LLM Token Usage] Provider: Groq | Model: {self.model}")
+                print(f"  Prompt: {prompt_tokens} | Completion: {completion_tokens} | Total: {tokens}")
+
+            # DEBUG: Verbose level - Full response details
+            if is_debug_verbose():
+                print_debug_header("LLM RESPONSE (Groq)", level=2)
                 print(f"Model: {self.model}")
-                print(f"Tokens used: {tokens}")
-                print(f"Answer (first 300 chars):")
+                print(f"Total tokens: {tokens} (prompt: {prompt_tokens}, completion: {completion_tokens})")
+                print(f"\nAnswer (first 300 chars):")
                 print(answer_text[:300] + "...")
-                print("="*80)
+                print(f"\nFull answer length: {len(answer_text)} chars")
+                print_debug_footer(level=2)
 
             return {
                 "answer": answer_text,
@@ -388,7 +398,6 @@ NOW ANSWER BASED ON THE CONTEXT."""
             }
         except Exception as e:
             print(f"[ERROR] Groq API call failed: {e}")
-            import traceback
             traceback.print_exc()
             raise
 

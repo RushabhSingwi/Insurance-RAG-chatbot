@@ -1,33 +1,61 @@
 """
 Advanced Text Cleaning Module
-Handles aggressive text cleaning and metadata extraction
+
+Handles aggressive text cleaning and metadata extraction for IRDAI documents.
+Removes non-English text while preserving important metadata.
 """
 
 import re
+import sys
 import unicodedata
+from pathlib import Path
 from typing import Dict
 
+# Add src directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from config import get_config
+from utils.common import get_files_with_extension
 
-def remove_hindi_ultra_aggressive(text):
+# Load configuration
+config = get_config()
+
+# Constants
+MIN_ENGLISH_RATIO = 0.5
+MIN_ENGLISH_WORDS = 3
+MAX_SINGLE_CHAR_COUNT = 8
+METADATA_SUBJECT_MAX_LENGTH = 200
+SAFE_PUNCTUATION = '.,;:!?()[]{}\'"-/&@#%$\n'
+
+
+def remove_hindi_ultra_aggressive(text: str) -> str:
     """
-    Ultra-aggressive cleaning: keeps ONLY English letters, numbers, and basic punctuation.
+    Ultra-aggressive cleaning: keeps only English letters, numbers, and basic punctuation.
+
+    Args:
+        text: Input text with mixed scripts
+
+    Returns:
+        Text containing only ASCII alphanumeric and safe punctuation
     """
-    # Normalize Unicode
+    # Normalize Unicode to decomposed form
     text = unicodedata.normalize('NFKD', text)
 
-    # Remove combining characters
+    # Remove combining characters (accents, etc.)
     text = ''.join(char for char in text if not unicodedata.combining(char))
 
     # Keep only safe ASCII characters
     safe_chars = []
     for char in text:
-        if char.isascii() and (char.isalnum() or char.isspace() or char in '.,;:!?()[]{}\'"-/&@#%$\n'):
+        if char.isascii() and (char.isalnum() or char.isspace() or char in SAFE_PUNCTUATION):
             safe_chars.append(char)
 
     return ''.join(safe_chars)
 
 
-def filter_lines_with_english(text, min_english_ratio=0.5):
+def filter_lines_with_english(
+    text: str,
+    min_english_ratio: float = MIN_ENGLISH_RATIO
+) -> str:
     """
     Keep only lines with sufficient English content.
 
@@ -61,27 +89,30 @@ def filter_lines_with_english(text, min_english_ratio=0.5):
         if total_count > 0:
             english_ratio = english_count / total_count
 
-            if english_ratio >= min_english_ratio or len(english_words) >= 3 or is_metadata:
+            if english_ratio >= min_english_ratio or len(english_words) >= MIN_ENGLISH_WORDS or is_metadata:
                 filtered_lines.append(line)
 
     return '\n'.join(filtered_lines)
 
 
-def extract_metadata(text) -> Dict:
+def extract_metadata(text: str) -> Dict[str, str]:
     """
-    Extract key metadata from document.
+    Extract key metadata from IRDAI document.
+
+    Args:
+        text: Document text to extract metadata from
 
     Returns:
-        Dictionary with 'ref', 'date', and 'subject' keys
+        Dictionary with 'ref', 'date', and 'subject' keys (if found)
     """
     metadata = {}
 
-    # Circular/Ref number
+    # Circular/Ref number (IRDAI format)
     ref_match = re.search(r'(IRDAI[\/A-Z0-9\-]+)', text, re.IGNORECASE)
     if ref_match:
         metadata['ref'] = ref_match.group(1)
 
-    # Date
+    # Date (various formats)
     date_match = re.search(
         r'(\d{1,2}(?:st|nd|rd|th)?\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s*,?\s*\d{4})',
         text,
@@ -90,17 +121,21 @@ def extract_metadata(text) -> Dict:
     if date_match:
         metadata['date'] = date_match.group(1)
 
-    # Subject
-    subject_match = re.search(r'(?:Re|Sub|Subject):\s*([A-Za-z0-9\s\-,/]+?)(?:\n\n|\.(?:\s|$))', text, re.IGNORECASE)
+    # Subject line
+    subject_match = re.search(
+        r'(?:Re|Sub|Subject):\s*([A-Za-z0-9\s\-,/]+?)(?:\n\n|\.(?:\s|$))',
+        text,
+        re.IGNORECASE
+    )
     if subject_match:
         subject = subject_match.group(1).strip()
         if re.match(r'^[a-zA-Z0-9\s\-,/\.]+$', subject):
-            metadata['subject'] = subject[:200]
+            metadata['subject'] = subject[:METADATA_SUBJECT_MAX_LENGTH]
 
     return metadata
 
 
-def clean_text_advanced(text):
+def clean_text_advanced(text: str) -> str:
     """
     Advanced cleaning pipeline:
     1. Extract metadata
@@ -123,12 +158,12 @@ def clean_text_advanced(text):
     # Filter lines
     text = filter_lines_with_english(text, min_english_ratio=0.5)
 
-    # Additional cleanup
+    # Additional cleanup - remove lines with too many isolated single characters
     lines = text.split('\n')
     clean_lines = []
     for line in lines:
         single_char_count = len(re.findall(r'\s[a-zA-Z]\s', line))
-        if single_char_count < 8:
+        if single_char_count < MAX_SINGLE_CHAR_COUNT:
             clean_lines.append(line)
 
     text = '\n'.join(clean_lines)
@@ -163,42 +198,45 @@ def clean_text_advanced(text):
     return '\n'.join(output_parts)
 
 
-def main():
-    """Clean all text files in the input directory."""
-    from pathlib import Path
+def main() -> None:
+    """
+    Clean all text files in the configured input directory.
 
-    input_dir = Path("../../data/processed_text")
+    Applies advanced cleaning pipeline to each file and prints statistics.
+    """
+    input_dir = config.PROCESSED_TEXT_DIR
 
     if not input_dir.exists():
         print(f"ERROR: Directory not found: {input_dir}")
         return
 
-    txt_files = list(input_dir.glob("*.txt"))
+    txt_files = get_files_with_extension(input_dir, '.txt')
 
     if not txt_files:
         print(f"No text files found in {input_dir}")
         return
 
     print(f"Found {len(txt_files)} text files")
-    print("="*60)
+    print("=" * 60)
 
     total_original = 0
     total_cleaned = 0
+    error_count = 0
 
     for i, txt_file in enumerate(txt_files, 1):
         print(f"[{i}/{len(txt_files)}] {txt_file.name[:50]:<50}", end=" ")
 
         try:
-            # Read
+            # Read original text
             original = txt_file.read_text(encoding='utf-8', errors='ignore')
 
-            # Clean
+            # Apply cleaning pipeline
             cleaned = clean_text_advanced(original)
 
-            # Write back
+            # Write cleaned text back to file
             txt_file.write_text(cleaned, encoding='utf-8')
 
-            # Stats
+            # Calculate and display statistics
             orig_len = len(original)
             clean_len = len(cleaned)
             total_original += orig_len
@@ -208,14 +246,17 @@ def main():
             print(f"{orig_len:6,} → {clean_len:6,} ({reduction:5.1f}%)")
 
         except Exception as e:
-            print(f"ERROR: {e}")
+            print(f"ERROR: {type(e).__name__}: {e}")
+            error_count += 1
 
     print()
-    print("="*60)
+    print("=" * 60)
     print(f"Complete!")
+    print(f"  Files processed: {len(txt_files) - error_count}/{len(txt_files)}")
     print(f"  Original: {total_original:,} chars")
     print(f"  Cleaned:  {total_cleaned:,} chars")
-    print(f"  Reduction: {((total_original - total_cleaned) / total_original * 100):.1f}%")
+    if total_original > 0:
+        print(f"  Reduction: {((total_original - total_cleaned) / total_original * 100):.1f}%")
 
 
 if __name__ == "__main__":

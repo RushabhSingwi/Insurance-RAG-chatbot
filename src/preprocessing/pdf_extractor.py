@@ -1,17 +1,29 @@
 """
 PDF Text Extraction Module
-Handles PDF to text conversion with OCR support
+
+Handles PDF to text conversion with OCR support.
+Provides functions to extract text from both text-based and scanned PDFs.
 """
 
-import os
 import re
 import sys
 from pathlib import Path
+from typing import Optional, Tuple
+
+# Add src directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from config import get_config
+from utils.common import (
+    setup_windows_console_encoding,
+    ensure_directory_exists,
+    get_files_with_extension
+)
 
 # Fix encoding for Windows console
-if sys.platform == 'win32':
-    import io
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+setup_windows_console_encoding()
+
+# Load configuration
+config = get_config()
 
 # Import PDF libraries
 try:
@@ -24,13 +36,25 @@ except ImportError:
     print("Warning: PDF processing libraries not installed.")
     print("Install with: pip install pdfplumber pdf2image pytesseract")
 
-# Configuration
-USE_OCR = True  # Set to False to skip OCR for scanned PDFs
+# Constants
+USE_OCR = True
+OCR_DPI = 300
+OCR_IMAGE_FORMAT = 'png'
+OCR_PSM_MODE = '--psm 6'
+OCR_LANGUAGES = 'eng+hin'
+OCR_LANGUAGE_FALLBACK = 'eng'
+MIN_TEXT_LENGTH_FOR_SUCCESS = 50
 
 
-def remove_devanagari(text):
+def remove_devanagari(text: str) -> str:
     """
-    Remove Devanagari (Hindi) characters and keep only English text.
+    Remove Devanagari (Hindi) and other non-English characters from text.
+
+    Args:
+        text: Input text containing mixed scripts
+
+    Returns:
+        Cleaned text with only English characters and basic punctuation
     """
     # Remove symbols between Hindi characters
     text = re.sub(r'([\u0900-\u097F])\s*[&/\\]\s*([\u0900-\u097F])', r'\1 \2', text)
@@ -63,12 +87,15 @@ def remove_devanagari(text):
     return text.strip()
 
 
-def extract_text_with_pdfplumber(pdf_path):
+def extract_text_with_pdfplumber(pdf_path: Path) -> Tuple[Optional[str], Optional[str]]:
     """
     Extract text using pdfplumber (for text-based PDFs).
 
+    Args:
+        pdf_path: Path to PDF file
+
     Returns:
-        tuple: (extracted_text, method_name) or (None, None) if failed
+        Tuple of (extracted_text, method_name) or (None, None) if extraction failed
     """
     if not PDF_LIBS_AVAILABLE:
         return None, None
@@ -83,28 +110,34 @@ def extract_text_with_pdfplumber(pdf_path):
                     if cleaned_text.strip():
                         text_content.append(cleaned_text)
 
-        if text_content:
-            full_text = "\n\n".join(text_content)
+        if not text_content:
+            return None, None
 
-            # Remove text before "Ref " identifier
-            if "Ref " in full_text:
-                ref_index = full_text.find("Ref ")
-                full_text = full_text[ref_index:]
+        full_text = "\n\n".join(text_content)
 
-            full_text = re.sub(r'\(\s*\)', '', full_text)
-            return full_text, "pdfplumber"
-        return None, None
+        # Remove text before "Ref " identifier (IRDAI-specific cleanup)
+        if "Ref " in full_text:
+            ref_index = full_text.find("Ref ")
+            full_text = full_text[ref_index:]
+
+        # Remove empty parentheses
+        full_text = re.sub(r'\(\s*\)', '', full_text)
+        return full_text, "pdfplumber"
+
     except Exception as e:
-        print(f"  pdfplumber failed: {e}")
+        print(f"  pdfplumber extraction failed: {type(e).__name__}: {e}")
         return None, None
 
 
-def extract_text_with_ocr(pdf_path):
+def extract_text_with_ocr(pdf_path: Path) -> Tuple[Optional[str], Optional[str]]:
     """
-    Extract text from scanned PDFs using OCR.
+    Extract text from scanned PDFs using OCR (Optical Character Recognition).
+
+    Args:
+        pdf_path: Path to PDF file
 
     Returns:
-        tuple: (extracted_text, method_name) or (None, None) if failed
+        Tuple of (extracted_text, method_name) or (None, None) if extraction failed
     """
     if not PDF_LIBS_AVAILABLE or not USE_OCR:
         return None, None
@@ -112,81 +145,96 @@ def extract_text_with_ocr(pdf_path):
     try:
         print(f"  Using OCR to extract text...")
 
-        images = convert_from_path(pdf_path, dpi=300, fmt='png')
+        images = convert_from_path(
+            pdf_path,
+            dpi=OCR_DPI,
+            fmt=OCR_IMAGE_FORMAT
+        )
         text_content = []
 
         for i, image in enumerate(images, 1):
             print(f"    OCR processing page {i}/{len(images)}...")
 
+            # Try with bilingual support first, fall back to English only
             try:
                 page_text = pytesseract.image_to_string(
                     image,
-                    lang='eng+hin',
-                    config='--psm 6'
+                    lang=OCR_LANGUAGES,
+                    config=OCR_PSM_MODE
                 )
-            except:
+            except Exception:
                 page_text = pytesseract.image_to_string(
                     image,
-                    lang='eng',
-                    config='--psm 6'
+                    lang=OCR_LANGUAGE_FALLBACK,
+                    config=OCR_PSM_MODE
                 )
 
             cleaned_text = remove_devanagari(page_text)
             if cleaned_text.strip():
                 text_content.append(cleaned_text)
 
-        if text_content:
-            full_text = "\n\n".join(text_content)
-            print(f"  OCR extracted {len(full_text)} characters")
-            return full_text, "OCR"
+        if not text_content:
+            return None, None
 
-        return None, None
+        full_text = "\n\n".join(text_content)
+        print(f"  OCR extracted {len(full_text):,} characters")
+        return full_text, "OCR"
+
     except Exception as e:
-        print(f"  OCR failed: {type(e).__name__}: {e}")
+        print(f"  OCR extraction failed: {type(e).__name__}: {e}")
         return None, None
 
 
-def extract_text_from_pdf(pdf_path, use_ocr=USE_OCR):
+def extract_text_from_pdf(
+    pdf_path: Path,
+    use_ocr: bool = USE_OCR
+) -> Tuple[Optional[str], Optional[str]]:
     """
-    Extract text from PDF using best available method.
-    Tries pdfplumber first, falls back to OCR if needed.
+    Extract text from PDF using the best available method.
+
+    Tries pdfplumber first for text-based PDFs, then falls back to OCR
+    for scanned PDFs if the initial extraction yields insufficient text.
 
     Args:
         pdf_path: Path to PDF file
-        use_ocr: Whether to use OCR as fallback
+        use_ocr: Whether to use OCR as fallback (default: True)
 
     Returns:
-        tuple: (extracted_text, method_name) or (None, None) if failed
+        Tuple of (extracted_text, method_name) or (None, None) if all methods failed
     """
-    # Try pdfplumber first
+    # Try pdfplumber first (faster for text-based PDFs)
     extracted_text, method = extract_text_with_pdfplumber(pdf_path)
 
-    # Fall back to OCR if needed
-    if (not extracted_text or len(extracted_text.strip()) < 50) and use_ocr:
+    # Fall back to OCR if extraction failed or yielded too little text
+    if use_ocr and (not extracted_text or len(extracted_text.strip()) < MIN_TEXT_LENGTH_FOR_SUCCESS):
         extracted_text, method = extract_text_with_ocr(pdf_path)
 
     return extracted_text, method
 
 
-def main():
-    """Process all PDFs in the input directory."""
-    from pathlib import Path
-    import json
+def main() -> None:
+    """
+    Process all PDFs in the configured input directory.
 
-    input_dir = Path("../../data/raw_pdfs")
-    output_dir = Path("../../data/processed_text")
-    output_dir.mkdir(parents=True, exist_ok=True)
+    Extracts text from each PDF file and saves it to the output directory.
+    Prints progress and summary statistics.
+    """
+    input_dir = config.RAW_PDFS_DIR
+    output_dir = config.PROCESSED_TEXT_DIR
+    ensure_directory_exists(output_dir)
 
-    pdf_files = list(input_dir.glob("*.pdf"))
+    pdf_files = get_files_with_extension(input_dir, '.pdf')
 
     if not pdf_files:
         print(f"No PDF files found in {input_dir}")
         return
 
     print(f"Found {len(pdf_files)} PDF files")
-    print("="*60)
+    print("=" * 60)
 
     success_count = 0
+    failed_files = []
+
     for i, pdf_file in enumerate(pdf_files, 1):
         print(f"[{i}/{len(pdf_files)}] {pdf_file.name[:50]}")
 
@@ -199,9 +247,15 @@ def main():
             success_count += 1
         else:
             print(f"  ✗ Failed to extract text\n")
+            failed_files.append(pdf_file.name)
 
-    print("="*60)
-    print(f"Complete: {success_count}/{len(pdf_files)} PDFs processed")
+    print("=" * 60)
+    print(f"Complete: {success_count}/{len(pdf_files)} PDFs processed successfully")
+
+    if failed_files:
+        print(f"\nFailed files ({len(failed_files)}):")
+        for filename in failed_files:
+            print(f"  - {filename}")
 
 
 if __name__ == "__main__":

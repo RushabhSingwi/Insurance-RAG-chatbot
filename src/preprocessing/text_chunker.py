@@ -3,13 +3,21 @@ Text Chunking Module
 Handles intelligent text chunking for embeddings
 """
 
+import json
 import sys
-from typing import List
+from pathlib import Path
+from typing import List, Optional
+
+# Add src directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from config import get_config
+from utils.common import setup_windows_console_encoding, ensure_directory_exists, get_files_with_extension
 
 # Fix encoding for Windows console
-if sys.platform == 'win32':
-    import io
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+setup_windows_console_encoding()
+
+# Load configuration
+config = get_config()
 
 # Try to import LangChain text splitter
 try:
@@ -21,19 +29,25 @@ except ImportError:
     print("Install with: pip install langchain-text-splitters")
 
 
-def split_into_chunks(text: str, max_tokens: int = 800, chunk_overlap: int = 200) -> List[str]:
+def split_into_chunks(text: str, max_tokens: Optional[int] = None, chunk_overlap: Optional[int] = None) -> List[str]:
     """
     Split text into intelligent chunks using LangChain's RecursiveCharacterTextSplitter.
     Falls back to simple chunking if LangChain is not available.
 
     Args:
         text: Input text to chunk
-        max_tokens: Maximum tokens per chunk (~4 chars per token)
-        chunk_overlap: Number of characters to overlap between chunks
+        max_tokens: Maximum tokens per chunk (~4 chars per token, default: from config)
+        chunk_overlap: Number of characters to overlap between chunks (default: from config)
 
     Returns:
         List of text chunks
     """
+    # Use config defaults if not specified
+    if max_tokens is None:
+        max_tokens = config.MAX_TOKENS_PER_CHUNK
+    if chunk_overlap is None:
+        chunk_overlap = config.CHUNK_OVERLAP
+
     if not LANGCHAIN_AVAILABLE:
         # Fallback: simple chunking by characters
         chunk_size = max_tokens * 4
@@ -68,14 +82,11 @@ def split_into_chunks(text: str, max_tokens: int = 800, chunk_overlap: int = 200
 
 def main():
     """Chunk all text files in the input directory."""
-    from pathlib import Path
-    import json
+    input_dir = config.PROCESSED_TEXT_CLEAN_DIR
+    output_dir = config.CHUNKS_DIR
+    ensure_directory_exists(output_dir)
 
-    input_dir = Path("data/processed_text_clean")
-    output_dir = Path("data/chunks")
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    txt_files = list(input_dir.glob("*.txt"))
+    txt_files = get_files_with_extension(input_dir, '.txt')
 
     if not txt_files:
         print(f"No text files found in {input_dir}")
@@ -95,8 +106,8 @@ def main():
                 print(f"[{i}/{len(txt_files)}] {txt_file.name[:50]:<50} SKIPPED (empty)")
                 continue
 
-            # Chunk
-            chunks = split_into_chunks(text, max_tokens=800, chunk_overlap=200)
+            # Chunk (uses config defaults)
+            chunks = split_into_chunks(text)
 
             # Save as JSON
             output_file = output_dir / f"{txt_file.stem}.json"

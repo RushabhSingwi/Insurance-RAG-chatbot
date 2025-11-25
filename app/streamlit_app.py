@@ -8,8 +8,14 @@ and get AI-generated answers with source citations.
 import streamlit as st
 import requests
 import os
+import sys
+from pathlib import Path
 from typing import Dict
 from datetime import datetime
+
+# Add src directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+from utils.debug_utils import is_debug_basic, is_debug_verbose, print_debug_header, print_debug_footer
 
 # Configuration
 API_URL = "http://127.0.0.1:8000"
@@ -434,13 +440,20 @@ def query_rag(question: str, top_k: int = 5, conversation_history: list = None) 
             "original_question": None  # Not needed - question is already original
         }
 
-        # DEBUG: Show what's being sent to API
-        if os.getenv("DEBUG", "false").lower() == "true":
-            print("\n" + "="*80)
-            print("DEBUG: REQUEST TO API")
-            print("="*80)
+        # DEBUG: Basic level - Show request summary
+        if is_debug_basic():
+            print(f"\n[Streamlit → API] Question: {question}")
+            if api_conversation_history:
+                print(f"  → With {len(api_conversation_history)} conversation history entries")
+            if is_follow_up:
+                print(f"  → Detected as follow-up question")
+
+        # DEBUG: Verbose level - Show full request details
+        if is_debug_verbose():
+            print_debug_header("REQUEST TO API (Streamlit)", level=2)
             print(f"Question: {question}")
             print(f"Is follow-up: {is_follow_up}")
+            print(f"LLM Provider: {llm_provider}")
             print(f"Conversation history entries: {len(api_conversation_history) if api_conversation_history else 0}")
             if api_conversation_history:
                 for i, entry in enumerate(api_conversation_history, 1):
@@ -448,7 +461,7 @@ def query_rag(question: str, top_k: int = 5, conversation_history: list = None) 
                     print(f"    Q: {entry.get('question', '')[:80]}...")
                     print(f"    A: {entry.get('answer', '')[:80]}...")
                     print(f"    Sources: {entry.get('sources', [])}")
-            print("="*80)
+            print_debug_footer(level=2)
 
         # Send both rephrased query (for retrieval) and original question (for LLM prompt)
         response = requests.post(

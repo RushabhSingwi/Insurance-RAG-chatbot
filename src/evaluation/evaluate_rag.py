@@ -10,14 +10,16 @@ Usage:
     python evaluate_rag.py --output results.json
 """
 
-import os
+import argparse
 import json
+import os
 import sys
+import time
+from datetime import datetime
 from pathlib import Path
 from typing import List, Dict
-import argparse
-from datetime import datetime
-import time
+
+import numpy as np
 
 if 'OPENAI_API_KEY' in os.environ:
     del os.environ['OPENAI_API_KEY']
@@ -106,8 +108,6 @@ def aggregate_metrics(results: List[Dict]) -> Dict:
     Returns:
         Aggregated metrics with mean, std, min, max
     """
-    import numpy as np
-
     # Collect all metrics
     all_metrics = {}
     for result in results:
