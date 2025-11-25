@@ -14,7 +14,8 @@ Implements the following metrics:
 """
 
 import re
-from typing import List, Dict, Any
+from typing import List, Dict
+
 import numpy as np
 
 
