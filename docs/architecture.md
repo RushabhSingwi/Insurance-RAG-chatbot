@@ -577,7 +577,6 @@ The IRDAI Insurance Circulars RAG system is a conversational AI chatbot built us
 | | Uvicorn | Latest | ASGI server |
 | **Web Frontend** | Streamlit | 1.41.1 | Interactive web UI |
 | **Data Handling** | NumPy | 1.26.4 | Array operations |
-| | Pandas | 2.2.1 | Data manipulation |
 | **Runtime** | Python | 3.12 | Language runtime |
 
 ### Why These Technologies?

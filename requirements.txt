@@ -30,7 +30,6 @@ langchain-huggingface<1.0.0
 # langsmith==0.3.45
 
 # Data handling
-pandas==2.2.1
 numpy==1.26.4
 
 # Embeddings & Vector Store
