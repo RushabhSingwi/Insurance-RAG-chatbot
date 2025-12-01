@@ -629,7 +629,6 @@ def main():
             st.metric("Embedding Model", health.get('embedding_model', 'N/A').split(':')[-1])
         else:
             st.error("❌ API is not running")
-            st.info("Start the API with:\n```bash\ncd rag-irdai-chatbot/src/api\nuvicorn main:app --reload\n```")
 
         st.markdown("---")
 
@@ -643,7 +642,7 @@ def main():
         llm_provider = st.selectbox(
             "Select LLM Provider",
             options=["openai", "groq"],
-            index=0 if st.session_state.llm_provider == "openai" else 1,
+            index=1 if st.session_state.llm_provider == "openai" else 1,
             help="OpenAI (paid, high quality) vs Groq (free, fast)",
             key="llm_provider_selector"
         )
