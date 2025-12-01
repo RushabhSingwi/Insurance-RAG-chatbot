@@ -18,8 +18,14 @@ Pillow==10.3.0
 nltk==3.8.1
 langchain==0.3.23
 langchain-text-splitters==0.3.8
-langchain-core==0.3.56
+langchain-core==1.1.0
 langchain-community==0.3.21
+langchain-huggingface==1.0.1
+langgraph==1.0.3
+langgraph-checkpoint==3.0.1
+langgraph-prebuilt==1.0.4
+langgraph-sdk==0.2.9
+langsmith==0.3.45
 
 # Data handling
 pandas==2.2.1
@@ -31,19 +37,20 @@ langchain-chroma==0.2.3
 langchain-openai==0.3.12
 chromadb==0.6.3
 chroma-hnswlib==0.7.6
+hnswlib==0.7.0
 
 # LLM Integration (Answer Generation)
 groq==0.11.0
 ollama==0.4.4
-huggingface-hub==0.26.5
-openai==1.35.3
+huggingface-hub==0.36.0
+openai==1.109.1
 tiktoken==0.7.0
 
 # Web Framework & UI
 streamlit==1.35.0
 fastapi==0.111.0
 uvicorn==0.30.1
-pydantic>=2.9.0,<3.0.0
+pydantic==2.12.4
 python-multipart==0.0.9
 
 # Testing
