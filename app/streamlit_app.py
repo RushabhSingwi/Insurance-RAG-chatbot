@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from utils.debug_utils import is_debug_basic, is_debug_verbose, print_debug_header, print_debug_footer
 
 # Configuration
-API_URL = "http://127.0.0.1:8000"
+API_URL = os.getenv("BACKEND_URL")
 
 # Page configuration
 st.set_page_config(
