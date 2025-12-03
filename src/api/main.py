@@ -113,7 +113,10 @@ async def health_check():
     try:
         pipeline = get_pipeline()
         # Get collection count from ChromaDB
-        index_size = pipeline.vector_store._collection.count()
+        try:
+            index_size = pipeline.vector_store._collection.count()
+        except:
+            index_size = 0
 
         return HealthResponse(
             status="healthy",
@@ -219,20 +222,16 @@ async def get_stats():
 async def startup_event():
     """Initialize RAG pipeline on startup."""
     print("Starting IRDAI RAG API...")
-    try:
-        get_pipeline()
-        print("RAG Pipeline initialized successfully!")
-    except Exception as e:
-        print(f"Error initializing RAG pipeline: {e}")
-        print("API will start but queries will fail until pipeline is initialized.")
+    print("Pipeline will load on first request.")
 
 
 if __name__ == "__main__":
     import uvicorn
+    import os
 
     # Run the API
     uvicorn.run(
-        "main:app",
+        "src.api.main:app",
         host="0.0.0.0",
         port=int(os.environ.get("PORT", 8000)),
         log_level="info"
