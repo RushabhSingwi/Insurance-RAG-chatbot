@@ -1,59 +1,27 @@
-# Core dependencies
-certifi==2025.11.12
-charset-normalizer==3.4.4
-idna==3.11
-requests==2.32.5
-urllib3==2.5.0
-beautifulsoup4==4.12.3
-python-dotenv==1.0.1
-
-# PDF Processing
-pdfplumber==0.11.0
-pypdf==4.2.0
-pdf2image==1.17.0
-pytesseract==0.3.13
-pillow==10.4.0
-
-# Text Processing
-nltk==3.8.1
-langchain==0.3.23
-langchain-text-splitters==0.3.8
-langchain-core==0.3.56
-langchain-community==0.3.21
-# langchain-huggingface - using flexible version to allow pip to resolve compatibility
-langchain-huggingface<1.0.0
-# langgraph packages removed - not used in codebase and cause version conflicts
-# langgraph==1.0.3
-# langgraph-checkpoint==3.0.1
-# langgraph-prebuilt==1.0.4
-# langgraph-sdk==0.2.9
-# langsmith==0.3.45
-
-# Data handling
-numpy==1.26.4
-
-# Embeddings & Vector Store
-sentence-transformers==2.7.0
-langchain-chroma==0.2.3
-langchain-openai==0.3.12
-chromadb==0.6.3
-chroma-hnswlib==0.7.6
-hnswlib==0.7.0
-
-# LLM Integration (Answer Generation)
-groq==0.11.0
-ollama==0.4.4
-huggingface-hub==0.36.0
-openai==1.109.1
-tiktoken==0.7.0
-
-# Web Framework & UI
-streamlit==1.35.0
+# --- Core API ---
 fastapi==0.111.0
 uvicorn==0.30.1
 pydantic==2.12.4
 python-multipart==0.0.9
+requests==2.32.5
+python-dotenv==1.0.1
 
-# Testing
-pytest==8.2.2
-pytest-asyncio==0.23.7
+# --- Frontend ---
+streamlit==1.35.0
+
+# --- LangChain + Chroma ---
+langchain==0.3.23
+langchain-core==0.3.56
+langchain-community==0.3.21
+langchain-chroma==0.2.3
+langchain-openai==0.2.3
+langchain-huggingface<1.0.0
+
+# LLM Integration (Answer Generation)
+groq==0.11.0
+openai==1.52.2
+
+# --- Vector DB ---
+chromadb==0.6.3
+hnswlib==0.7.0
+sentence-transformers==2.7.0
