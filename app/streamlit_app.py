@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from utils.debug_utils import is_debug_basic, is_debug_verbose, print_debug_header, print_debug_footer
 
 # Configuration
-API_URL = os.getenv("BACKEND_URL")
+API_URL = "https://irda-rag-backend.onrender.com"
 
 # Page configuration
 st.set_page_config(
